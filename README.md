@@ -23,6 +23,12 @@ copy .env.exemple .env
 .\.venv\Scripts\python -m uvicorn app.web:app --port 8000
 ```
 
+Pour une démonstration déjà remplie (3 factures émises, 5 commandes à vérifier, graphique et contrôles visibles), avant de lancer le serveur :
+
+```powershell
+.\.venv\Scripts\python -m app.demo
+```
+
 Ouvrir http://localhost:8000. Sous Linux ou macOS, remplacez `.\.venv\Scripts\python` par `.venv/bin/python`.
 
 ### Comptes de démonstration

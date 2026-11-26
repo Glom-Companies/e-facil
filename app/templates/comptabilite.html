@@ -2,7 +2,7 @@
 {% block titre %}Comptabilité{% endblock %}
 {% block contenu %}
 <div class="entete-page">
-  <div><h1>Comptabilité</h1><p class="sous">Rapport du jour sur le modèle du rapport Z de la DGI, écritures proposées et factures non payées.</p></div>
+  <div><h1>Comptabilité</h1></div>
   <a class="btn btn-outline-primary" href="/comptabilite/ecritures.csv">Exporter les écritures (CSV)</a>
 </div>
 <div class="row g-3">
@@ -33,13 +33,8 @@
           <td data-label="Échéance" class="text-secondary">{{ f.valide_le[:10] }}</td><td data-label="Reste" class="num">{{ f.reste_a_payer|fcfa }}</td></tr>
         {% endfor %}
       </table></div>
-      <div class="card-footer small text-secondary">Cette liste ouvre sur le recouvrement (cas 1 du hackathon), hors de notre périmètre.</div>
       {% else %}<p class="vide">Toutes les factures confirmées sont payées.</p>{% endif %}
     </div>
-    <div class="card mt-3"><div class="card-body small text-secondary">
-      L'export propose les écritures 411 (client), 701 (ventes) et 4431 (TVA facturée). Les numéros de compte sont à faire confirmer par votre comptable.
-      Les petites entités au système minimal de trésorerie peuvent se limiter aux encaissements.
-    </div></div>
   </div>
 </div>
 {% endblock %}

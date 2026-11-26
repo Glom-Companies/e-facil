@@ -23,7 +23,7 @@ def connecter(c, login):
     c.post("/deconnexion")
     page = c.get("/connexion").text
     r = c.post("/connexion", data={"login": login, "mot_de_passe": "demo2026", "csrf": csrf(page)})
-    assert r.status_code == 200 and "Bonjour" in r.text
+    assert r.status_code == 200 and "Se déconnecter" in r.text
 
 
 def champ(html, nom):
@@ -39,8 +39,9 @@ def test_parcours_complet(client):
         "texte_livraison": "BL : 10 cartons de savon, 5 sacs de riz"})
     assert r.status_code == 200 and "Brouillon de facture" in r.text
     did = re.search(r"/dossiers/(\d+)/corriger", r.text).group(1)
-    assert "<mark" in r.text and "bloque la validation" in r.text
+    assert "<mark" in r.text and "bloquant(s)" in r.text
     assert "Valider et numéroter" not in r.text  # la vendeuse ne voit pas le bouton
+    assert "réservée au responsable" in r.text
 
     # La vendeuse tente quand même de valider : refus côté serveur.
     r2 = client.post(f"/dossiers/{did}/valider", data={"csrf": csrf(r.text), "version": champ(r.text, "version")})
@@ -51,10 +52,10 @@ def test_parcours_complet(client):
     cle = re.search(r'name="cle" value="(ECART[^"]+)"', page).group(1)
     page = client.post(f"/dossiers/{did}/decider", data={"csrf": csrf(page), "version": champ(page, "version"),
                                                          "cle": cle, "choix": "facturer_livre"}).text
-    assert "Aucun blocage" in page
+    assert "aucun blocage" in page
     r = client.post(f"/dossiers/{did}/valider", data={"csrf": csrf(page), "version": champ(page, "version"),
                                                       "idem": champ(page, "idem")})
-    assert "verrouillé" in r.text and "FV-" in r.text
+    assert "Verrouillée" in r.text and "FV-" in r.text
     fid = re.search(r"/factures/(\d+)/emettre", r.text).group(1)
     r = client.post(f"/factures/{fid}/emettre", data={"csrf": csrf(r.text), "idem": champ(r.text, "idem")})
     assert "SIMU-" in r.text
@@ -64,7 +65,8 @@ def test_parcours_complet(client):
                                                     "q:0": "1", "motif": "Carton abîmé", "emettre": "1"})
     assert "FA-" in r.text and "Confirmée" in r.text
 
-    for url in ("/", "/factures", "/journal?verifier=1", "/referentiels", "/comptabilite"):
+    for url in ("/", "/dossiers", "/factures", "/recherche?q=Dossou", "/aide", "/journal?verifier=1", "/referentiels",
+                "/comptabilite"):
         assert client.get(url).status_code == 200
     assert "Journal intègre" in client.get("/journal?verifier=1").text
     assert client.get("/comptabilite/ecritures.csv").status_code == 200

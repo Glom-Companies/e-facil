@@ -2,7 +2,7 @@
 {% set p = entreprise.personnalisation %}
 {% block titre %}Paramètres{% endblock %}
 {% block contenu %}
-<div class="entete-page"><div><h1>Paramètres de l'entreprise</h1><p class="sous">Aspect des factures et règles de fonctionnement.</p></div></div>
+<div class="entete-page"><div><h1>Paramètres de l'entreprise</h1></div></div>
 <div class="row g-3">
   <div class="col-lg-7">
     <form method="post" action="/parametres" enctype="multipart/form-data" class="card">
@@ -20,14 +20,13 @@
           <div class="col-12"><label class="form-label" for="pied">Pied de page</label>
             <input class="form-control" id="pied" name="pied_de_page" value="{{ p.pied_de_page }}"></div>
         </div>
-        <p class="small text-secondary mt-3 mb-0">Les mentions obligatoires (numéro, IFU, groupes de taxe, totaux, bloc de sécurité) restent toujours présentes.</p>
       </div>
       <div class="card-header"><h2 class="card-title">Règles</h2></div>
       <div class="card-body">
         <label class="form-label">Arrondi de la TVA</label>
-        <label class="form-check"><input class="form-check-input" type="radio" name="mode_arrondi" value="groupe" {% if p.mode_arrondi != 'ligne' %}checked{% endif %}> <span class="form-check-label">Par groupe de taxe (recommandé, comme e-MECeF)</span></label>
+        <label class="form-check"><input class="form-check-input" type="radio" name="mode_arrondi" value="groupe" {% if p.mode_arrondi != 'ligne' %}checked{% endif %}> <span class="form-check-label">Par groupe de taxe</span></label>
         <label class="form-check"><input class="form-check-input" type="radio" name="mode_arrondi" value="ligne" {% if p.mode_arrondi == 'ligne' %}checked{% endif %}> <span class="form-check-label">Par ligne</span></label>
-        <label class="form-check mt-3"><input class="form-check-input" type="checkbox" name="mode_solo" value="1" {% if mode_solo %}checked{% endif %}> <span class="form-check-label">Mode solo : une seule personne prépare et valide (micro-entreprise). Un récapitulatif est exigé et la validation est signalée au journal.</span></label>
+        <label class="form-check mt-3"><input class="form-check-input" type="checkbox" name="mode_solo" value="1" {% if mode_solo %}checked{% endif %}> <span class="form-check-label">Mode solo (une personne prépare et valide)</span></label>
       </div>
       <div class="card-footer"><button class="btn btn-primary" type="submit">Enregistrer</button></div>
     </form>
@@ -36,17 +35,15 @@
     <div class="card">
       <div class="card-header"><h2 class="card-title">Lecture des messages par l'IA</h2></div>
       <div class="card-body small">
-        {% if gemini %}<p class="text-success mb-1">Clé Gemini configurée.</p>{% else %}<p class="mb-1">Aucune clé Gemini : seule la lecture par règles simples est disponible. Ajoutez <span class="mono">GEMINI_API_KEY</span> dans le fichier <span class="mono">.env</span>.</p>{% endif %}
-        <p class="text-secondary mb-0">Seules des données fictives sont envoyées au service gratuit de Google.</p>
+        {% if gemini %}<span class="etat etat-CONFIRMEE">Clé Gemini active</span>{% else %}<span class="etat etat-ANNULEE">Pas de clé Gemini</span>{% endif %}
       </div>
     </div>
     <div class="card mt-3">
       <div class="card-header"><h2 class="card-title">Démonstration</h2></div>
       <div class="card-body">
-        <p class="small text-secondary">Efface tous les dossiers, factures et le journal, puis recharge les clients et articles fictifs.</p>
         <form method="post" action="/parametres/reinitialiser" onsubmit="return document.getElementById('conf-reinit').checked">
           <input type="hidden" name="csrf" value="{{ csrf }}">
-          <label class="form-check mb-2"><input class="form-check-input" type="checkbox" id="conf-reinit"> <span class="form-check-label small">Je confirme vouloir tout effacer</span></label>
+          <label class="form-check mb-2"><input class="form-check-input" type="checkbox" id="conf-reinit"> <span class="form-check-label small">Confirmer</span></label>
           <button class="btn btn-outline-danger" type="submit">Réinitialiser la démonstration</button>
         </form>
       </div>

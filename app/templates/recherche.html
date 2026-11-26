@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block titre %}Recherche{% endblock %}
+{% block contenu %}
+<div class="entete-page"><div><h1>Recherche{% if q %} : « {{ q }} »{% endif %}</h1></div></div>
+{% if q|length < 2 %}
+<div class="carte"><p class="vide mb-0"><i class="ti ti-search"></i>Saisissez au moins deux caractères.</p></div>
+{% else %}
+<div class="row g-4">
+  <div class="col-lg-6">
+    <div class="titre-bloc"><h2>Factures ({{ res.factures|length }})</h2></div>
+    <div class="carte"><ul class="liste">
+      {% for f in res.factures %}
+      <li><span class="icone-carre accent"><i class="ti ti-file-invoice"></i></span>
+        <a class="ligne-lien" href="/factures/{{ f.id }}"><div class="l-corps"><div class="l-titre mono">{{ f.numero }}</div><div class="l-sous">{{ f.contenu.client.nom }} · {{ f.valide_le|date_fr }}</div></div></a>
+        <div class="l-droite"><div class="l-montant">{{ f.total_ttc|fcfa }}</div><span class="etat etat-{{ f.statut }}">{{ STATUTS[f.statut] }}</span></div></li>
+      {% else %}<li class="vide d-block">Aucune facture.</li>{% endfor %}
+    </ul></div>
+  </div>
+  <div class="col-lg-6">
+    <div class="titre-bloc"><h2>Commandes ({{ res.dossiers|length }})</h2></div>
+    <div class="carte"><ul class="liste">
+      {% for d in res.dossiers %}
+      <li><span class="icone-carre"><i class="ti ti-message"></i></span>
+        <a class="ligne-lien" href="/dossiers/{{ d.id }}"><div class="l-corps"><div class="l-titre">{{ d.client or 'Client à préciser' }}</div><div class="l-sous">Dossier {{ d.id }} · {{ CANAUX.get(d.canal, d.canal) }} · {{ d.cree_le|date_fr }}</div></div></a>
+        <div class="l-droite"><span class="etat etat-{{ d.statut }}">{{ STATUTS[d.statut] }}</span></div></li>
+      {% else %}<li class="vide d-block">Aucune commande.</li>{% endfor %}
+    </ul></div>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

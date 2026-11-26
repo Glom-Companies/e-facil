@@ -220,24 +220,23 @@ def anomalies(brouillon: dict, clients: list[dict], articles: list[dict], doublo
     if not c.get("id"):
         if len(c.get("candidats") or []) > 1:
             noms = ", ".join(next(x["nom"] for x in clients if x["id"] == i) for i in c["candidats"])
-            ajouter("CLIENT_AMBIGU", f"« {c.get('nom_cite')} » peut désigner : {noms}. Choisissez le bon client.")
+            ajouter("CLIENT_AMBIGU", f"« {c.get('nom_cite')} » : {noms}")
         else:
             cite = c.get("nom_cite")
-            ajouter("CLIENT_INCONNU", f"« {cite} » ne correspond à aucun client. Choisissez un client ou créez sa fiche."
-                    if cite else "Le message ne nomme pas le client. Choisissez-le.")
+            ajouter("CLIENT_INCONNU", f"« {cite} »" if cite else "Client non nommé")
 
     index = {a["id"]: a for a in articles}
     if not brouillon["lignes"]:
-        ajouter("ARTICLE_INCONNU", "Aucun article reconnu dans le message. Ajoutez au moins une ligne.")
+        ajouter("ARTICLE_INCONNU", "Aucun article reconnu")
     for l in brouillon["lignes"]:
         nom = l.get("designation_citee") or l["cle"]
         art = index.get(l.get("article_id"))
         if not art:
-            ajouter("ARTICLE_INCONNU", f"« {nom} » ne correspond à aucun article. Choisissez l'article.", l["cle"])
+            ajouter("ARTICLE_INCONNU", f"« {nom} »", l["cle"])
             continue
         q = l.get("quantite_commandee")
         if q is None:
-            ajouter("QUANTITE_MANQUANTE", f"{art['designation']} : le message ne donne pas de quantité. Saisissez-la.", l["cle"])
+            ajouter("QUANTITE_MANQUANTE", art["designation"], l["cle"])
         else:
             try:
                 qd = lire_quantite(q)
@@ -248,14 +247,13 @@ def anomalies(brouillon: dict, clients: list[dict], articles: list[dict], doublo
         livree = l.get("quantite_livree")
         if livree is not None and q is not None and Decimal(str(livree)) != Decimal(str(q)):
             ajouter("ECART_COMMANDE_LIVRAISON",
-                    f"{art['designation']} : {q} commandé(s), {livree} livré(s). La facture portera sur le livré.",
+                    f"{art['designation']} : {q} commandé(s), {livree} livré(s)",
                     l["cle"], f"ECART_COMMANDE_LIVRAISON:{l['cle']}")
         if l.get("prix_cite") and art:
             ecart = abs(Decimal(l["prix_cite"]) - art["prix_unitaire_ttc"]) / art["prix_unitaire_ttc"]
             if ecart > SEUIL_PRIX_INHABITUEL:
                 ajouter("PRIX_INHABITUEL",
-                        f"{art['designation']} : le client cite {l['prix_cite']:,} F, le catalogue indique "
-                        f"{art['prix_unitaire_ttc']:,} F ({ecart:.0%} d'écart). Le prix du catalogue s'applique sauf décision."
+                        f"{art['designation']} : cité {l['prix_cite']:,} F, catalogue {art['prix_unitaire_ttc']:,} F ({ecart:.0%})"
                         .replace(",", " "), l["cle"], f"PRIX_INHABITUEL:{l['cle']}")
 
     total = brouillon.get("total_cite", {}).get("valeur")
@@ -263,20 +261,17 @@ def anomalies(brouillon: dict, clients: list[dict], articles: list[dict], doublo
         try:
             recalc = calculer(lignes_facturables(brouillon, articles, "commandees"), 0, mode_arrondi).total_ttc
             if recalc != total:
-                ajouter("TOTAL_INCOHERENT", f"Le client annonce {total:,} F ; le total recalculé de sa commande est "
-                        f"{recalc:,} F. Seul le total recalculé sera facturé.".replace(",", " "))
+                ajouter("TOTAL_INCOHERENT", f"Annoncé {total:,} F, recalculé {recalc:,} F".replace(",", " "))
         except ErreurCalcul:
             pass
     if doublons:
-        ajouter("DOUBLON_PROBABLE", "Même client et mêmes articles que le dossier n° "
-                + ", ".join(str(d) for d in doublons) + " reçu il y a moins de 72 h.")
+        ajouter("DOUBLON_PROBABLE", "Identique au dossier " + ", ".join(str(d) for d in doublons) + " (moins de 72 h)")
     if brouillon.get("remise_demandee"):
         r = brouillon["remise_demandee"]
         unite = "%" if r.get("type") == "POURCENTAGE" else " F"
-        ajouter("REMISE_A_VALIDER", f"Le client demande une remise de {r.get('valeur'):g}{unite}. "
-                "Elle ne s'applique qu'avec l'accord du responsable.")
+        ajouter("REMISE_A_VALIDER", f"{r.get('valeur'):g}{unite} demandée")
     for s in brouillon.get("instructions_suspectes") or []:
-        ajouter("INSTRUCTION_SUSPECTE", f"« {s} » : consigne ignorée, elle n'a aucun effet sur la facture.")
+        ajouter("INSTRUCTION_SUSPECTE", f"« {s} » : ignorée")
 
     if not any(a["bloquante"] and not a["resolue"] for a in res):
         try:

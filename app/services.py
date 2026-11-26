@@ -683,3 +683,92 @@ def export_ecritures_csv(conn) -> str:
                 w.writerow([r["horodatage_dgi"][:10], r["numero"], compte, libelle,
                             montant if sens == "debit" else "", montant if sens == "credit" else "", r["code_dgi"]])
     return sortie.getvalue()
+
+
+# --- Tableau de bord et recherche ----------------------------------------------------------
+
+JOURS_COURTS = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"]
+
+
+def tableau_de_bord(conn) -> dict:
+    """Chiffres du tableau de bord : activité sur 7 jours, contrôles déclenchés, encaissements attendus."""
+    aujourd_hui = date.today()
+    jours = [aujourd_hui - timedelta(days=i) for i in range(6, -1, -1)]
+    montants: dict[str, int] = {}
+    for r in conn.execute("SELECT type, total_ttc, substr(horodatage_dgi, 1, 10) AS j FROM factures "
+                          "WHERE statut = 'CONFIRMEE' AND horodatage_dgi >= ?",
+                          ((aujourd_hui - timedelta(days=13)).isoformat(),)):
+        montants[r["j"]] = montants.get(r["j"], 0) + (r["total_ttc"] if r["type"] == "FV" else -r["total_ttc"])
+    semaine = [{"libelle": f"{JOURS_COURTS[j.weekday()]} {j.day:02d}", "cette_semaine": montants.get(j.isoformat(), 0),
+                "semaine_passee": montants.get((j - timedelta(days=7)).isoformat(), 0)} for j in jours]
+    maximum = max([1] + [max(s["cette_semaine"], s["semaine_passee"]) for s in semaine])
+    for s in semaine:
+        s["h1"] = round(100 * max(s["cette_semaine"], 0) / maximum)
+        s["h2"] = round(100 * max(s["semaine_passee"], 0) / maximum)
+
+    controles: dict[str, int] = {}
+    limite = (datetime.now() - timedelta(days=7)).isoformat()
+    for r in conn.execute("SELECT id FROM dossiers WHERE statut != 'SUPPRIME' AND cree_le >= ?", (limite,)):
+        for a in analyser(conn, _charger_dossier(conn, r["id"])):
+            controles[a["code"]] = controles.get(a["code"], 0) + 1
+
+    a_encaisser, impayees = 0, []
+    for r in conn.execute("SELECT id FROM factures WHERE type = 'FV' AND statut = 'CONFIRMEE' ORDER BY id"):
+        f = facture(conn, r["id"])
+        if f["reste_a_payer"] > 0:
+            c = client(conn, f["contenu"]["client"].get("id")) or {}
+            echeance = (datetime.fromisoformat(f["valide_le"]) + timedelta(days=c.get("delai_paiement_jours", 0))).date()
+            a_encaisser += f["reste_a_payer"]
+            impayees.append({"id": f["id"], "numero": f["numero"], "client": f["contenu"]["client"]["nom"],
+                             "reste": f["reste_a_payer"], "echeance": echeance.isoformat(),
+                             "en_retard": echeance < aujourd_hui})
+    impayees.sort(key=lambda x: x["echeance"])
+    compte = lambda sql: conn.execute(sql).fetchone()[0]  # noqa: E731
+    mois = aujourd_hui.isoformat()[:7]
+    encaisse_mois = conn.execute("SELECT COALESCE(SUM(montant), 0) FROM paiements WHERE substr(enregistre_le, 1, 7) = ?",
+                                 (mois,)).fetchone()[0]
+    net_mois = conn.execute("SELECT COALESCE(SUM(CASE type WHEN 'FV' THEN net_a_payer ELSE -net_a_payer END), 0) "
+                            "FROM factures WHERE statut = 'CONFIRMEE' AND substr(horodatage_dgi, 1, 7) = ?",
+                            (mois,)).fetchone()[0]
+    return {
+        "encaisse_mois": encaisse_mois,
+        "net_mois": net_mois,
+        "taux_encaisse": round(100 * encaisse_mois / net_mois) if net_mois > 0 else 0,
+        "semaine": semaine,
+        "total_semaine": sum(s["cette_semaine"] for s in semaine),
+        "total_semaine_passee": sum(s["semaine_passee"] for s in semaine),
+        "controles": controles,
+        "a_encaisser": a_encaisser,
+        "impayees": impayees,
+        "a_emettre": compte("SELECT COUNT(*) FROM factures WHERE statut = 'VALIDEE'"),
+        "en_attente_dgi": compte("SELECT COUNT(*) FROM factures WHERE statut = 'EN_ATTENTE_DGI'"),
+        "ca_mois": compte("SELECT COALESCE(SUM(CASE type WHEN 'FV' THEN total_ttc ELSE -total_ttc END), 0) FROM factures "
+                          f"WHERE statut = 'CONFIRMEE' AND substr(horodatage_dgi, 1, 7) = '{aujourd_hui.isoformat()[:7]}'"),
+        "factures_mois": compte("SELECT COUNT(*) FROM factures WHERE statut = 'CONFIRMEE' AND type = 'FV' AND "
+                                f"substr(horodatage_dgi, 1, 7) = '{aujourd_hui.isoformat()[:7]}'"),
+    }
+
+
+def rechercher(conn, q: str) -> dict:
+    q = (q or "").strip()
+    if len(q) < 2:
+        return {"dossiers": [], "factures": []}
+    motif = f"%{q}%"
+    ids_clients = [c["id"] for c in clients(conn) if B.normaliser(q) in B.normaliser(c["nom"] + " " + " ".join(c["alias"]))]
+    dossiers = []
+    for r in conn.execute("SELECT id, brouillon, statut, cree_le, canal FROM dossiers WHERE statut != 'SUPPRIME' "
+                          "ORDER BY id DESC LIMIT 200"):
+        br = json.loads(r["brouillon"])
+        if br["client"].get("id") in ids_clients or str(r["id"]) == q.lstrip("#"):
+            dossiers.append({"id": r["id"], "statut": r["statut"], "cree_le": r["cree_le"], "canal": r["canal"],
+                             "client": (client(conn, br["client"].get("id")) or {}).get("nom") or br["client"].get("nom_cite")})
+    for r in conn.execute("SELECT id, statut, cree_le, canal, brouillon FROM dossiers WHERE statut != 'SUPPRIME' "
+                          "AND texte_commande LIKE ? ORDER BY id DESC LIMIT 20", (motif,)):
+        if not any(d["id"] == r["id"] for d in dossiers):
+            br = json.loads(r["brouillon"])
+            dossiers.append({"id": r["id"], "statut": r["statut"], "cree_le": r["cree_le"], "canal": r["canal"],
+                             "client": (client(conn, br["client"].get("id")) or {}).get("nom") or br["client"].get("nom_cite")})
+    factures = [dict(r, contenu=json.loads(r["contenu"])) for r in conn.execute(
+        "SELECT * FROM factures WHERE numero LIKE ? OR contenu LIKE ? OR code_dgi LIKE ? ORDER BY id DESC LIMIT 50",
+        (motif, f'%"nom": "%{q}%', motif))]
+    return {"dossiers": dossiers[:30], "factures": factures}

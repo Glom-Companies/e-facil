@@ -1,35 +1,41 @@
 {% extends "base.html" %}
 {% block titre %}Connexion{% endblock %}
-{% block contenu %}
+{% block public %}
 <div class="connexion">
-  <div class="text-center mb-4">
-    <span class="marque-carre mx-auto mb-2" style="width:44px;height:44px;font-size:1.3rem">F</span>
-    <h1 class="h2 mb-0">{{ entreprise.raison_sociale }}</h1>
-    <p class="text-secondary"><strong>e-FACIL</strong> · de la commande reçue à la facture vérifiable</p>
-  </div>
-  <div class="card">
-    <div class="card-body">
+  <section class="connexion-marque">
+    <span class="logo logo-grand">e-<span>FACIL</span></span>
+    <p class="small mb-0">BillGenius · BWAI'2026</p>
+  </section>
+  <section class="connexion-form">
+    <div class="boite">
+      <h2 class="h1 mb-1" style="font-weight:700">Connexion</h2>
+      <p class="text-secondary mb-4">{{ entreprise.raison_sociale }}</p>
+      {% if erreur %}<div class="alert alert-danger" role="alert">{{ erreur }}</div>{% endif %}
+      {% if flash %}<div class="alert alert-success" role="status">{{ flash }}</div>{% endif %}
       <form method="post" action="/connexion" autocomplete="off">
         <input type="hidden" name="csrf" value="{{ csrf }}">
         <div class="mb-3">
           <label class="form-label" for="login">Identifiant</label>
-          <input class="form-control" id="login" name="login" required autofocus placeholder="aicha">
+          <input class="form-control form-control-lg" id="login" name="login" required autofocus>
         </div>
-        <div class="mb-3">
+        <div class="mb-4">
           <label class="form-label" for="mdp">Mot de passe</label>
-          <input class="form-control" id="mdp" name="mot_de_passe" type="password" required>
+          <input class="form-control form-control-lg" id="mdp" name="mot_de_passe" type="password" required>
         </div>
-        <button class="btn btn-primary w-100" type="submit">Se connecter</button>
+        <button class="btn btn-primary btn-grand w-100" type="submit">Se connecter</button>
       </form>
+      <div class="puces mt-4">
+        {% for c in comptes %}<button type="button" class="puce" data-login="{{ c.login }}">{{ c.nom }}</button>{% endfor %}
+      </div>
     </div>
-  </div>
-  <div class="card mt-3">
-    <div class="card-body">
-      <p class="text-secondary small mb-2">Comptes de démonstration (mot de passe dans le README) :</p>
-      <table class="comptes-demo small w-100">
-        {% for c in comptes %}<tr><td class="mono">{{ c.login }}</td><td>{{ c.nom }}</td><td class="text-secondary">{{ ROLES[c.role] }}</td></tr>{% endfor %}
-      </table>
-    </div>
-  </div>
+  </section>
 </div>
+{% endblock %}
+{% block scripts %}
+<script>
+document.querySelectorAll('[data-login]').forEach(b => b.addEventListener('click', () => {
+  document.getElementById('login').value = b.dataset.login;
+  document.getElementById('mdp').focus();
+}));
+</script>
 {% endblock %}

@@ -165,3 +165,27 @@ def test_socle_commande_remise_envoi_rectificative(client):
     r = client.post(f"/factures/{fid}/rectifier", data={"csrf": csrf(r.text)})
     assert "Facture rectificative" in r.text and f["numero"] in r.text
     assert client.get(f"/factures/{fid}/pdf").status_code == 200
+
+
+def test_inscription_espace_separe(client):
+    page = client.get("/inscription").text
+    r = client.post("/inscription", data={
+        "csrf": csrf(page), "raison_sociale": "Ets Houénou et Fils", "ifu": "3200000000099", "adresse": "Cadjèhoun",
+        "regime_fiscal": "TPS", "taille": "micro", "admin_nom": "Houénou", "admin_login": "direction",
+        "mot_de_passe": "motdepasse-long", "mot_de_passe_2": "motdepasse-long"})
+    assert "Espace créé" in r.text and "Mode solo" in r.text and "Ets Houénou" in r.text
+    for url in ("/", "/dossiers", "/factures", "/referentiels", "/journal?verifier=1", "/parametres", "/comptabilite",
+                "/dossiers/nouveau", "/simulateur", "/recherche?q=x"):
+        assert client.get(url).status_code == 200, url
+    page = client.get("/parametres").text
+    client.post("/parametres/utilisateurs", data={"csrf": csrf(page), "nom": "Afi", "login": "afi", "role": "vendeur",
+                                                  "mot_de_passe": "afi-motdepasse"})
+    assert "Dossou" not in client.get("/referentiels").text  # aucune donnée de SÈNA dans le nouvel espace
+    connecter(client, "admin")  # la démonstration SÈNA reste intacte
+    assert "SÈNA" in client.get("/").text and "afi" not in client.get("/parametres").text
+    page = client.get("/connexion").text
+    assert "Ets Houénou" in page
+    slug = re.search(r'<option value="([a-z0-9-]+)">Ets Houénou', page).group(1)
+    r = client.post("/connexion", data={"csrf": csrf(page), "login": "afi", "mot_de_passe": "afi-motdepasse",
+                                        "espace": slug})
+    assert "Se déconnecter" in r.text and "Ets Houénou" in r.text

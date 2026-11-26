@@ -199,15 +199,22 @@ def lignes_facturables(brouillon: dict, articles: list[dict], quantites: str = "
 def _taux_remise(brouillon: dict, index: dict, quantites: str = "facturees") -> Decimal:
     """Remise accordée par le responsable, en pourcentage. Une remise en montant (« 2 000 F ») est
     convertie en pourcentage du total TTC avant remise, puis appliquée aux prix unitaires."""
+    remises = list(brouillon.get("remises_accordees") or [])
     remise = brouillon.get("remise_demandee")
     d_remise = brouillon.get("decisions", {}).get("REMISE_A_VALIDER")
-    if not (remise and d_remise and d_remise.get("acceptee")):
+    if remise and d_remise and d_remise.get("acceptee"):
+        remises.insert(0, remise)
+    if not remises:
         return Decimal(0)
-    valeur = Decimal(str(remise.get("valeur") or 0))
-    if remise.get("type") == "MONTANT":
-        brut = sum(l.montant_ttc for _, l in _lignes_avec_cle(brouillon, index, Decimal(0), quantites))
-        return valeur * 100 / brut if brut > 0 else Decimal(0)
-    return valeur
+    # Plusieurs remises se calculent en cascade (R-09) : chacune s'applique au montant restant.
+    brut = sum(l.montant_ttc for _, l in _lignes_avec_cle(brouillon, index, Decimal(0), quantites))
+    if brut <= 0:
+        return Decimal(0)
+    reste = Decimal(brut)
+    for r in remises:
+        valeur = Decimal(str(r.get("valeur") or 0))
+        reste -= valeur if r.get("type") == "MONTANT" else reste * valeur / 100
+    return max(Decimal(0), min(Decimal(100), (1 - reste / brut) * 100))
 
 
 def _lignes_avec_cle(brouillon: dict, index: dict, taux_remise: Decimal, quantites: str):

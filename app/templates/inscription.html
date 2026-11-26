@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block titre %}Créer l'espace de votre entreprise{% endblock %}
+{% block public %}
+<div class="page-inscription">
+  <div class="inscription-interieur">
+    <div class="marque-connexion"><img src="/static/img/icone.svg" alt="" width="44" height="44"><span>e-<b>FACIL</b></span></div>
+    <h1>Créer l'espace de votre entreprise</h1>
+    <p class="sous-titre">Un espace séparé, avec sa propre base : vos données ne sont partagées avec aucune autre entreprise.</p>
+    {% if erreur %}<div class="alert alert-danger" role="alert">{{ erreur }}</div>{% endif %}
+
+    <form method="post" action="/inscription" autocomplete="off" class="etapes-inscription">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+
+      <fieldset>
+        <legend><span>1</span> L'entreprise</legend>
+        <div class="grille-champs">
+          <div class="plein"><label class="lib-champ" for="raison_sociale">Raison sociale</label>
+            <input class="champ" id="raison_sociale" name="raison_sociale" required placeholder="ex. Ets Houénou et Fils"></div>
+          <div><label class="lib-champ" for="ifu">IFU</label>
+            <input class="champ mono" id="ifu" name="ifu" required inputmode="numeric" pattern="\d{13}" maxlength="13" placeholder="13 chiffres"></div>
+          <div><label class="lib-champ" for="rccm">RCCM</label>
+            <input class="champ mono" id="rccm" name="rccm" placeholder="RB/COT/…"></div>
+          <div class="plein"><label class="lib-champ" for="adresse">Adresse</label>
+            <input class="champ" id="adresse" name="adresse" required placeholder="Quartier, ville"></div>
+          <div><label class="lib-champ" for="telephone">Téléphone</label>
+            <input class="champ" id="telephone" name="telephone" placeholder="+229 01 …"></div>
+          <div><label class="lib-champ" for="regime_fiscal">Régime fiscal</label>
+            <select class="champ" id="regime_fiscal" name="regime_fiscal">{% for k, v in regimes.items() %}<option value="{{ k }}">{{ v }}</option>{% endfor %}</select></div>
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend><span>2</span> Taille</legend>
+        <div class="choix-taille">
+          {% for k, t in tailles.items() %}
+          <label class="carte-taille"><input type="radio" name="taille" value="{{ k }}" {% if loop.index == 2 %}checked{% endif %} required>
+            <strong>{{ t[0] }}</strong><span>{{ t[1] }}</span></label>
+          {% endfor %}
+        </div>
+        <p class="note-demo text-start mt-2">Une micro-entreprise travaille en mode solo ; les autres séparent préparation et validation.</p>
+      </fieldset>
+
+      <fieldset>
+        <legend><span>3</span> Administrateur</legend>
+        <div class="grille-champs">
+          <div><label class="lib-champ" for="admin_nom">Nom</label>
+            <input class="champ" id="admin_nom" name="admin_nom" required></div>
+          <div><label class="lib-champ" for="admin_login">Identifiant</label>
+            <input class="champ mono" id="admin_login" name="admin_login" required pattern="[a-z0-9._\-]{3,30}" placeholder="ex. direction"></div>
+          <div><label class="lib-champ" for="mdp1">Mot de passe</label>
+            <input class="champ" id="mdp1" type="password" name="mot_de_passe" required minlength="10" autocomplete="new-password" placeholder="10 caractères min."></div>
+          <div><label class="lib-champ" for="mdp2">Confirmer</label>
+            <input class="champ" id="mdp2" type="password" name="mot_de_passe_2" required minlength="10" autocomplete="new-password"></div>
+        </div>
+      </fieldset>
+
+      <button class="bouton-connexion" type="submit">Créer l'espace</button>
+      <p class="note-demo">Déjà inscrit ? <a href="/connexion">Se connecter</a></p>
+    </form>
+    <p class="mention-connexion">Prototype BWAI'2026 · données fictives · émission DGI simulée · aucune valeur fiscale</p>
+  </div>
+</div>
+{% endblock %}

@@ -22,6 +22,7 @@ from decimal import Decimal
 from pathlib import Path
 
 from . import brouillon as B
+from . import db as _db
 from .db import (connecter, ecrire_parametre, initialiser_schema, journaliser, lire_parametre, maintenant,
                  prochain_numero, transaction)
 from .extraction import EXTRACTEURS, LIT_LES_DOCUMENTS, ErreurExtraction, extraire, ia_disponibles, normaliser_resultat
@@ -116,7 +117,16 @@ def entreprise(conn) -> dict:
 # --- Initialisation et réinitialisation -------------------------------------------------
 
 TABLES = ["parametres", "utilisateurs", "clients", "articles", "dossiers", "factures", "compteurs", "idempotence",
-          "journal", "dgi_simulee", "proformas", "paiements"]
+          "journal", "dgi_simulee", "proformas", "paiements", "messages_canal"]
+
+# Numéros fictifs de la démonstration : le numéro WhatsApp de l'entreprise et les téléphones habilités.
+CANAUX_DEMO = {
+    "whatsapp": {"numero_entreprise": "+229 01 90 00 00 00",
+                 "habilites": [{"numero": "+229 01 90 00 00 11", "uid": "U-01"},
+                               {"numero": "+229 01 90 00 00 12", "uid": "U-02"},
+                               {"numero": "+229 01 90 00 00 13", "uid": "U-03"}]},
+    "telegram": {"bot": "@sena_efacil_bot", "habilites": []},
+}
 
 
 def reinitialiser(conn, acteur: str = "systeme") -> None:
@@ -132,6 +142,161 @@ def reinitialiser(conn, acteur: str = "systeme") -> None:
         raise
     initialiser_schema(conn)
     charger_donnees(conn, acteur)
+    for dossier in (_dossier_pieces(), _db.dossier_donnees("media_canal")):
+        for f in dossier.glob("*"):
+            f.unlink(missing_ok=True)
+    with transaction(conn):
+        ecrire_parametre(conn, "canaux", CANAUX_DEMO)
+
+
+# --- Inscription d'une entreprise : un espace (une base) par entreprise ------------------------
+
+TAILLES = {
+    "micro": ("Micro-entreprise", "1 personne", "Mode solo activé : la même personne prépare et valide, après un récapitulatif. "
+              "Créez votre compte de vente."),
+    "petite": ("Petite entreprise", "2 à 10 personnes", "Créez au moins un vendeur et un responsable, puis habilitez leurs numéros WhatsApp."),
+    "moyenne": ("Moyenne entreprise", "11 personnes et plus", "Créez vendeurs, responsable et comptable, puis habilitez leurs numéros WhatsApp."),
+}
+REGIMES = {"TPS": "Taxe professionnelle synthétique (TPS)", "REEL": "Régime du réel"}
+ESPACES_MAX = int(os.environ.get("ESPACES_MAX", "20"))
+
+
+def espaces() -> list[dict]:
+    dossier = Path(_db.CHEMIN_BASE).parent / "espaces"
+    res = []
+    for f in sorted(dossier.glob("*.db")) if dossier.is_dir() else []:
+        try:
+            c = connecter(f)
+            nom = (lire_parametre(c, "entreprise", {}) or {}).get("raison_sociale") or f.stem
+            c.close()
+        except Exception:
+            continue
+        res.append({"slug": f.stem, "nom": nom})
+    return res
+
+
+def creer_espace(d: dict) -> tuple[str, str, str]:
+    """Crée la base d'une nouvelle entreprise et son compte administrateur. Renvoie (espace, uid, conseil)."""
+    raison = (d.get("raison_sociale") or "").strip()[:80]
+    ifu = re.sub(r"\s", "", d.get("ifu") or "")
+    taille, regime = d.get("taille"), d.get("regime_fiscal")
+    nom, login, mdp = (d.get("admin_nom") or "").strip()[:60], (d.get("admin_login") or "").strip().lower(), d.get("mot_de_passe") or ""
+    if len(raison) < 2:
+        raise Refus("Indiquez la raison sociale.")
+    if not re.fullmatch(r"\d{13}", ifu):
+        raise Refus("L'IFU compte 13 chiffres.")
+    if not (d.get("adresse") or "").strip():
+        raise Refus("Indiquez l'adresse.")
+    if taille not in TAILLES or regime not in REGIMES:
+        raise Refus("Choisissez la taille et le régime fiscal.")
+    if len(nom) < 2 or not re.fullmatch(r"[a-z0-9._-]{3,30}", login):
+        raise Refus("Administrateur : nom, et identifiant de 3 à 30 caractères (minuscules, chiffres, . _ -).")
+    if len(mdp) < 10 or mdp != d.get("mot_de_passe_2"):
+        raise Refus("Mot de passe : 10 caractères au moins, saisi deux fois à l'identique.")
+    if len(espaces()) >= ESPACES_MAX:
+        raise Refus("Nombre maximal d'espaces atteint sur ce prototype.")
+    base = re.sub(r"[^a-z0-9]+", "-", B.normaliser(raison)).strip("-")[:30] or "entreprise"
+    slug = f"{base}-{secrets.token_hex(2)}"
+    chemin = _db.chemin_espace(slug)
+    c = connecter(chemin)
+    try:
+        initialiser_schema(c)
+        sel, h = hacher(mdp)
+        with transaction(c):
+            ecrire_parametre(c, "entreprise", {
+                "raison_sociale": raison, "ifu": ifu, "rccm": (d.get("rccm") or "").strip()[:40],
+                "adresse": d["adresse"].strip()[:120], "telephone": (d.get("telephone") or "").strip()[:30],
+                "email": (d.get("email") or "").strip()[:80], "regime_fiscal": regime, "taille": taille,
+                "nim_simule": "SIMU" + "".join(secrets.choice("0123456789") for _ in range(6))})
+            ecrire_parametre(c, "mode_solo", taille == "micro")
+            ecrire_parametre(c, "canaux", {"whatsapp": {"numero_entreprise": "", "habilites": []},
+                                           "telegram": {"bot": "", "habilites": []}})
+            c.execute("INSERT INTO utilisateurs (id, login, nom, role, sel, hash) VALUES (?,?,?,?,?,?)",
+                      ("U-01", login, nom, "admin", sel, h))
+            journaliser(c, "U-01", "ESPACE_CREE", "entreprise", {"raison_sociale": raison, "taille": taille,
+                                                                 "regime_fiscal": regime})
+    finally:
+        c.close()
+    return slug, "U-01", TAILLES[taille][2]
+
+
+# --- Comptes créés par l'administrateur ----------------------------------------------------
+
+ROLES_COMPTES = ("vendeur", "responsable", "comptable", "admin")
+
+
+def creer_utilisateur(conn, admin: dict, nom: str, login: str, role: str, mot_de_passe: str) -> str:
+    exiger(admin, "parametres.ecrire")
+    nom, login = (nom or "").strip()[:60], (login or "").strip().lower()
+    if len(nom) < 2:
+        raise Refus("Indiquez le nom de la personne.")
+    if not re.fullmatch(r"[a-z0-9._-]{3,30}", login):
+        raise Refus("Identifiant : 3 à 30 caractères, lettres minuscules, chiffres, point, tiret.")
+    if role not in ROLES_COMPTES:
+        raise Refus("Rôle inconnu.")
+    if len(mot_de_passe or "") < 10:
+        raise Refus("Mot de passe : 10 caractères au moins.")
+    if conn.execute("SELECT 1 FROM utilisateurs WHERE login = ?", (login,)).fetchone():
+        raise Refus("Cet identifiant existe déjà.")
+    n = conn.execute("SELECT COUNT(*) FROM utilisateurs").fetchone()[0] + 1
+    uid = f"U-{n:02d}"
+    while conn.execute("SELECT 1 FROM utilisateurs WHERE id = ?", (uid,)).fetchone():
+        n += 1
+        uid = f"U-{n:02d}"
+    sel, h = hacher(mot_de_passe)
+    with transaction(conn):
+        conn.execute("INSERT INTO utilisateurs (id, login, nom, role, sel, hash) VALUES (?,?,?,?,?,?)",
+                     (uid, login, nom, role, sel, h))
+        journaliser(conn, admin["id"], "UTILISATEUR_CREE", f"utilisateur:{uid}", {"login": login, "role": role})
+    return uid
+
+
+def utilisateurs(conn) -> list[dict]:
+    return [dict(r) for r in conn.execute("SELECT id, login, nom, role FROM utilisateurs ORDER BY id")]
+
+
+# --- Choix de l'IA (côté serveur) et pièces jointes --------------------------------------
+
+ORDRE_IA_DEFAUT = "groq,gemini,ollama"
+
+
+def extracteur_auto(a_un_document: bool = False) -> str:
+    """IA utilisée pour lire une commande : la première disponible dans IA_ORDRE (Groq, puis Gemini,
+    puis le modèle local) ; pour une photo ou un PDF, la première qui sait lire un document.
+    Sans aucune IA : règles simples. Les autres IA restent le repli automatique (voir _lire)."""
+    ordre = [n.strip() for n in os.environ.get("IA_ORDRE", ORDRE_IA_DEFAUT).split(",") if n.strip() in EXTRACTEURS]
+    dispo = set(ia_disponibles()) | ({"ollama"} if os.environ.get("OLLAMA_ACTIF") == "1" else set())
+    for nom in ordre:
+        if nom in dispo and (not a_un_document or nom in LIT_LES_DOCUMENTS):
+            return nom
+    return "regles"
+
+
+TYPES_PIECES = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "application/pdf": "pdf",
+                "audio/ogg": "ogg", "audio/webm": "webm", "audio/mpeg": "mp3", "audio/mp4": "m4a"}
+
+
+def _dossier_pieces() -> Path:
+    return _db.dossier_donnees("pieces")
+
+
+def enregistrer_piece(did: int, octets: bytes, mime: str) -> None:
+    """Pièce justificative d'origine (photo, PDF, note vocale), conservée hors de la base, nommée par le
+    numéro du dossier : aucun nom de fichier fourni par l'utilisateur n'arrive sur le disque."""
+    ext = TYPES_PIECES.get((mime or "").split(";")[0].strip())
+    if not ext:
+        return
+    dossier = _dossier_pieces()
+    dossier.mkdir(parents=True, exist_ok=True)
+    (dossier / f"{int(did)}.{ext}").write_bytes(octets)
+
+
+def piece(did: int) -> tuple[bytes, str] | None:
+    for mime, ext in TYPES_PIECES.items():
+        f = _dossier_pieces() / f"{int(did)}.{ext}"
+        if f.is_file():
+            return f.read_bytes(), mime
+    return None
 
 
 def charger_donnees(conn, acteur: str = "systeme") -> None:
@@ -254,6 +419,8 @@ def creer_dossier(conn, u: dict, canal: str, texte_commande: str, texte_livraiso
             details["extracteur_demande"] = demande
             details["repli"] = repli
         journaliser(conn, u["id"], "DOSSIER_CREE", f"dossier:{did}", details)
+    if octets and mime:
+        enregistrer_piece(did, octets, mime)
     return did
 
 
@@ -297,6 +464,27 @@ def quotas_epuises(message: str) -> bool:
     """Vrai si tous les modèles d'IA essayés ont échoué pour quota gratuit atteint."""
     motifs = _ECHEC_MODELE.findall(message or "")
     return bool(motifs) and all(m.startswith("quota gratuit") for m in motifs)
+
+
+def accorder_remise(conn, u: dict, did: int, version: int, type_remise: str, valeur: str, motif: str) -> None:
+    """Remise supplémentaire accordée par le responsable ; elle s'ajoute en cascade aux précédentes."""
+    exiger(u, "dossier.decider")
+    if type_remise not in ("POURCENTAGE", "MONTANT"):
+        raise Refus("Type de remise inconnu.")
+    try:
+        v = Decimal(str(valeur).replace(",", ".").replace(" ", ""))
+    except Exception:
+        raise Refus("Valeur de remise illisible.")
+    if v <= 0 or (type_remise == "POURCENTAGE" and v >= 100) or v != v.quantize(Decimal("0.01")):
+        raise Refus("Remise invalide.")
+    if len((motif or "").strip()) < 3:
+        raise Refus("Indiquez le motif de la remise.")
+    d = _charger_dossier(conn, did)
+    br = d["brouillon"]
+    br.setdefault("remises_accordees", []).append({"type": type_remise, "valeur": float(v), "motif": motif.strip()[:120],
+                                                   "par": u["id"], "le": maintenant()})
+    _enregistrer_brouillon(conn, u, did, version, br, "REMISE_ACCORDEE",
+                           {"type": type_remise, "valeur": float(v), "motif": motif.strip()[:120]})
 
 
 def _enregistrer_brouillon(conn, u: dict, did: int, version: int, br: dict, action: str, details: dict) -> None:

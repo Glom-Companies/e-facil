@@ -102,6 +102,33 @@ def trouver_article(designation: str | None, articles: list[dict]) -> tuple[str 
 
 # --- Construction du brouillon ----------------------------------------------------------
 
+# Pièce qui prouve l'exécution : bon de livraison (vente de biens) ou attestation de service fait
+# (prestation de service). On facture ce qui est livré, ou ce qui est réalisé.
+PIECES_EXECUTION = {
+    "BL": {"nom": "Bon de livraison", "court": "BL", "fait": "Livré", "faits": "livré(s)",
+           "facturer": "Facturer le livré", "attendre": "ou attendre le reste de la livraison",
+           "ecart": "Quantité livrée différente de la commande", "citation": "Quantité livrée",
+           "rattacher": "Rattacher le bon de livraison", "coller": "Collez le bon de livraison signé",
+           "aucun": "Aucun bon de livraison.", "souhait": "Livraison souhaitée", "rattache": "Bon de livraison rattaché.",
+           "saisie": "Vous pouvez aussi saisir les quantités livrées directement dans le tableau.",
+           "regle": "On facture ce qui est livré.", "nature": "Vente de biens",
+           "exemple": "BL 0231 - Ets Dossou : 10 cartons de savon, 5 sacs de riz. Reçu par le magasinier."},
+    "ASF": {"nom": "Attestation de service fait", "court": "ASF", "fait": "Réalisé", "faits": "réalisé(s)",
+            "facturer": "Facturer le réalisé", "attendre": "ou attendre la fin de la prestation",
+            "ecart": "Prestation réalisée différente de la commande", "citation": "Quantité réalisée",
+            "rattacher": "Rattacher l'attestation", "coller": "Collez l'attestation de service fait signée",
+            "aucun": "Aucune attestation de service fait.", "souhait": "Intervention souhaitée",
+            "rattache": "Attestation de service fait rattachée.",
+            "saisie": "Vous pouvez aussi saisir les quantités réalisées directement dans le tableau.",
+            "regle": "On facture ce qui est réalisé.", "nature": "Prestation de service",
+            "exemple": "Attestation de service fait : 3 jours de maintenance réalisés. Signé : M. Agbo, Hôtel Agossou."},
+}
+
+
+def piece(brouillon_ou_contenu: dict | None) -> dict:
+    return PIECES_EXECUTION.get((brouillon_ou_contenu or {}).get("piece_execution") or "BL", PIECES_EXECUTION["BL"])
+
+
 CHAMPS_COMMANDE = {"reference_commande": "référence de commande", "date_livraison": "livraison souhaitée",
                    "conditions_paiement": "conditions de paiement"}
 
@@ -249,7 +276,8 @@ def anomalies(brouillon: dict, clients: list[dict], articles: list[dict], doublo
     def ajouter(code, message, ligne=None, cle_decision=None):
         cle = cle_decision or code
         decision = dec.get(cle)
-        res.append({"code": code, "titre": LIBELLES[code], "message": message, "ligne": ligne,
+        titre = piece(brouillon)["ecart"] if code == "ECART_COMMANDE_LIVRAISON" else LIBELLES[code]
+        res.append({"code": code, "titre": titre, "message": message, "ligne": ligne,
                     "bloquante": code in BLOQUANTES, "cle_decision": cle if code in DECISIONS else None,
                     "resolue": bool(decision), "decision": decision})
 
@@ -284,7 +312,7 @@ def anomalies(brouillon: dict, clients: list[dict], articles: list[dict], doublo
         livree = l.get("quantite_livree")
         if livree is not None and q is not None and Decimal(str(livree)) != Decimal(str(q)):
             ajouter("ECART_COMMANDE_LIVRAISON",
-                    f"{art['designation']} : {q} commandé(s), {livree} livré(s)",
+                    f"{art['designation']} : {q} commandé(s), {livree} {piece(brouillon)['faits']}",
                     l["cle"], f"ECART_COMMANDE_LIVRAISON:{l['cle']}")
         if l.get("prix_cite") and art:
             ecart = abs(Decimal(l["prix_cite"]) - art["prix_unitaire_ttc"]) / art["prix_unitaire_ttc"]

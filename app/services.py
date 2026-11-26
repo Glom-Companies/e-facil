@@ -206,6 +206,7 @@ TAILLES = {
     "petite": ("Petite entreprise", "2 à 10 personnes", "Créez au moins un vendeur et un responsable, puis habilitez leurs numéros WhatsApp."),
     "moyenne": ("Moyenne entreprise", "11 personnes et plus", "Créez vendeurs, responsable et comptable, puis habilitez leurs numéros WhatsApp."),
 }
+ACTIVITES = {"biens": "Vente de biens", "services": "Prestation de services", "mixte": "Les deux"}
 REGIMES = {"TPS": "Taxe professionnelle synthétique (TPS)", "REEL": "Régime du réel"}
 ESPACES_MAX = int(os.environ.get("ESPACES_MAX", "20"))
 
@@ -256,6 +257,7 @@ def creer_espace(d: dict) -> tuple[str, str, str]:
                 "raison_sociale": raison, "ifu": ifu, "rccm": (d.get("rccm") or "").strip()[:40],
                 "adresse": d["adresse"].strip()[:120], "telephone": (d.get("telephone") or "").strip()[:30],
                 "email": (d.get("email") or "").strip()[:80], "regime_fiscal": regime, "taille": taille,
+                "activite": d.get("activite") if d.get("activite") in ACTIVITES else "biens",
                 "nim_simule": "SIMU" + "".join(secrets.choice("0123456789") for _ in range(6))})
             ecrire_parametre(c, "mode_solo", taille == "micro")
             ecrire_parametre(c, "canaux", {"whatsapp": {"numero_entreprise": "", "habilites": []},
@@ -432,9 +434,14 @@ def totaux_brouillon(conn, d: dict) -> dict | None:
         return None
 
 
+def piece_par_defaut(conn) -> str:
+    """Bon de livraison, sauf pour une entreprise de services (attestation de service fait)."""
+    return "ASF" if entreprise(conn).get("activite") == "services" else "BL"
+
+
 def creer_dossier(conn, u: dict, canal: str, texte_commande: str, texte_livraison: str | None,
                   extracteur: str, octets: bytes | None = None, mime: str | None = None,
-                  nom_fichier: str | None = None) -> int:
+                  nom_fichier: str | None = None, piece_execution: str | None = None) -> int:
     exiger(u, "dossier.ecrire")
     texte_commande = (texte_commande or "").strip()
     if not texte_commande and not octets:
@@ -445,6 +452,7 @@ def creer_dossier(conn, u: dict, canal: str, texte_commande: str, texte_livraiso
     if not texte_commande and brut.get("transcription"):
         texte_commande = brut["transcription"].strip()
     br = B.construire(brut, texte_commande, cls, arts, verifier=True)
+    br["piece_execution"] = piece_execution if piece_execution in B.PIECES_EXECUTION else piece_par_defaut(conn)
     extraction_bl = None
     if texte_livraison and texte_livraison.strip():
         extraction_bl, ext_bl, repli_bl = _lire(extracteur, texte_livraison, cls, arts)
@@ -717,6 +725,7 @@ def valider(conn, u: dict, did: int, version: int, cle_idem: str | None = None) 
             "dossier_id": did,
             "decisions": d["brouillon"].get("decisions", {}),
             "mode_arrondi": ent["personnalisation"]["mode_arrondi"],
+            "piece_execution": d["brouillon"].get("piece_execution", "BL"),
             "commande": {k: (d["brouillon"].get(k) or {}).get("valeur") for k in B.CHAMPS_COMMANDE},
             "rectifie": d["brouillon"].get("rectifie"),
         }

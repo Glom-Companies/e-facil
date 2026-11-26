@@ -4,7 +4,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block titre %}Facturation{% endblock %} · {{ entreprise.raison_sociale or "Facturation PME" }}</title>
+  <title>{% block titre %}Facturation{% endblock %} · {% block suffixe_titre %}{{ entreprise.raison_sociale or "e-FACIL" }}{% endblock %}</title>
   <link rel="icon" type="image/svg+xml" href="/static/img/icone.svg">
   <link rel="apple-touch-icon" href="/static/img/icone-512.png">
   <link rel="stylesheet" href="/static/vendor/tabler.min.css">

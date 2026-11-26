@@ -188,7 +188,8 @@ def generer(contenu: dict, securite: dict | None = None, copie: bool = False) ->
     if contenu.get("motif"):
         mentions.append(f"Motif de l'avoir : {contenu['motif'][:80]}")
     commande = contenu.get("commande") or {}
-    for cle, lib in (("reference_commande", "Réf. commande"), ("date_livraison", "Livraison souhaitée"),
+    souhait = "Intervention souhaitée" if contenu.get("piece_execution") == "ASF" else "Livraison souhaitée"
+    for cle, lib in (("reference_commande", "Réf. commande"), ("date_livraison", souhait),
                      ("conditions_paiement", "Conditions de paiement")):
         if commande.get(cle):
             mentions.append(f"{lib} : {str(commande[cle])[:60]}")

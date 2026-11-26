@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% block titre %}Créer l'espace de votre entreprise{% endblock %}
+{% block suffixe_titre %}e-FACIL{% endblock %}
 {% block public %}
 <div class="page-inscription">
   <div class="inscription-interieur">
@@ -24,6 +25,8 @@
             <input class="champ" id="adresse" name="adresse" required placeholder="Quartier, ville"></div>
           <div><label class="lib-champ" for="telephone">Téléphone</label>
             <input class="champ" id="telephone" name="telephone" placeholder="+229 01 …"></div>
+          <div><label class="lib-champ" for="activite">Activité principale</label>
+            <select class="champ" id="activite" name="activite">{% for k, v in activites.items() %}<option value="{{ k }}">{{ v }}</option>{% endfor %}</select></div>
           <div><label class="lib-champ" for="regime_fiscal">Régime fiscal</label>
             <select class="champ" id="regime_fiscal" name="regime_fiscal">{% for k, v in regimes.items() %}<option value="{{ k }}">{{ v }}</option>{% endfor %}</select></div>
         </div>

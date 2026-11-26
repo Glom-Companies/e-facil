@@ -207,3 +207,14 @@ def test_cloisonnement_des_roles(client):
     client.post("/parametres/roles", data={"csrf": csrf(page), "vendeur": "Commercial", "responsable": "Gérant",
                                            "comptable": "Comptable", "admin": "Administrateur"})
     assert "Commercial" in client.get("/parametres").text
+
+
+def test_attestation_de_service_fait(client):
+    connecter(client, "rodrigue")
+    page = client.get("/dossiers/nouveau").text
+    assert "Attestation de service fait" in page
+    r = client.post("/dossiers/nouveau", data={
+        "csrf": csrf(page), "canal": "EMAIL", "extracteur": "regles", "piece_execution": "ASF",
+        "texte_commande": "Bjr, c Dossou. 12 cartons de savon", "texte_livraison": "Attestation : 10 cartons de savon"})
+    assert "Prestation réalisée différente de la commande" in r.text and "Facturer le réalisé" in r.text
+    assert "Bon de livraison" not in r.text

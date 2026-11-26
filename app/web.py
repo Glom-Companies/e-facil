@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import base64
+from datetime import date
 import json
 import os
 import secrets
@@ -16,9 +17,9 @@ from markupsafe import Markup, escape
 from starlette.middleware.sessions import SessionMiddleware
 
 from . import services as S
-from .brouillon import LIBELLES
+from .brouillon import LIBELLES, montants_par_ligne
 from .db import ecrire_parametre, lire_parametre, transaction, verifier_journal, journaliser
-from .extraction import EXTRACTEURS
+from .extraction import EXTRACTEURS, ia_disponibles
 from .moteur import format_fcfa
 from .pdf import LIBELLES_PAIEMENT, generer
 from .texte import localiser
@@ -96,7 +97,12 @@ def surligner(texte: str, citations: list[tuple[str, str]]) -> Markup:
 
 
 modeles.env.filters.update(fcfa=fcfa, date_fr=date_fr)
-modeles.env.globals.update(aide=aide, ROLES=ROLES, STATUTS=STATUTS, CANAUX=CANAUX, PAIEMENTS=LIBELLES_PAIEMENT,
+def version_css() -> str:
+    """Date de modification de la feuille de style : le navigateur la recharge dès qu'elle change."""
+    return str(int((RACINE / "app" / "static" / "app.css").stat().st_mtime))
+
+
+modeles.env.globals.update(version_css=version_css, aide=aide, ROLES=ROLES, STATUTS=STATUTS, CANAUX=CANAUX, PAIEMENTS=LIBELLES_PAIEMENT,
                            LIBELLES=LIBELLES, EXTRACTEURS=EXTRACTEURS)
 
 
@@ -138,23 +144,10 @@ def verifier_csrf(request: Request, jeton: str) -> None:
         raise S.Refus("Formulaire expiré. Rechargez la page.")
 
 
-JOURS = ["lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"]
-MOIS = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre",
-        "décembre"]
-
-
-def date_du_jour() -> str:
-    from datetime import date
-    d = date.today()
-    return f"{JOURS[d.weekday()].capitalize()} {d.day} {MOIS[d.month - 1]} {d.year}"
-
-
 def page(request: Request, nom: str, c, u, **ctx):
     if u:
-        ctx.setdefault("nb_a_traiter", c.execute(
-            "SELECT (SELECT COUNT(*) FROM dossiers WHERE statut = 'BROUILLON') + "
-            "(SELECT COUNT(*) FROM factures WHERE statut IN ('VALIDEE', 'EN_ATTENTE_DGI'))").fetchone()[0])
-    ctx.update(request=request, u=u, csrf=jeton_csrf(request), entreprise=S.entreprise(c), aujourdhui=date_du_jour(),
+        ctx.setdefault("nb_brouillons", c.execute("SELECT COUNT(*) FROM dossiers WHERE statut = 'BROUILLON'").fetchone()[0])
+    ctx.update(request=request, u=u, csrf=jeton_csrf(request), entreprise=S.entreprise(c),
                flash=request.session.pop("flash", None), erreur=request.session.pop("erreur", None),
                idem=str(uuid.uuid4()))
     return modeles.TemplateResponse(request, nom, ctx)
@@ -213,7 +206,7 @@ async def connexion_post(request: Request, login: str = Form(...), mot_de_passe:
         request.session["uid"] = u["id"]
         with transaction(c):
             journaliser(c, u["id"], "CONNEXION", f"utilisateur:{u['id']}", {})
-        return retour(request, "/")
+        return retour(request, "/", flash=f"Bonjour {u['nom']}.")
     except S.Refus as e:
         return retour(request, "/connexion", erreur=str(e))
     finally:
@@ -244,44 +237,38 @@ def avec_utilisateur(fonction):
 
 # --- Tableau de bord ---------------------------------------------------------------------
 
-def _brouillons(c, limite=50) -> list[dict]:
-    res = []
-    for r in c.execute("SELECT id FROM dossiers WHERE statut = 'BROUILLON' ORDER BY id DESC LIMIT ?", (limite,)):
-        d = S.dossier(c, r["id"])
-        cl = S.client(c, d["brouillon"]["client"].get("id"))
-        d["client_nom"] = cl["nom"] if cl else (d["brouillon"]["client"].get("nom_cite") or "Client à préciser")
-        d["bloquantes"] = [a for a in d["anomalies"] if a["bloquante"] and not a["resolue"]]
-        res.append(d)
-    return res
-
-
-ICONES_CONTROLES = {
-    "ECART_COMMANDE_LIVRAISON": "ti-truck-delivery", "PRIX_INHABITUEL": "ti-tag", "TOTAL_INCOHERENT": "ti-calculator",
-    "DOUBLON_PROBABLE": "ti-copy", "CLIENT_INCONNU": "ti-user-question", "CLIENT_AMBIGU": "ti-users",
-    "ARTICLE_INCONNU": "ti-package-off", "QUANTITE_MANQUANTE": "ti-number", "QUANTITE_INVALIDE": "ti-ban",
-    "REMISE_A_VALIDER": "ti-discount", "INSTRUCTION_SUSPECTE": "ti-shield-x", "CALCUL_IMPOSSIBLE": "ti-alert-triangle",
-}
-modeles.env.globals.update(ICONES_CONTROLES=ICONES_CONTROLES)
-
-
 @app.get("/", response_class=HTMLResponse)
 async def accueil(request: Request):
     async def vue(request, c, u):
-        brouillons = _brouillons(c, 30)
+        brouillons = lister_dossiers(c, "BROUILLON", 30)
         factures = [dict(r, contenu=json.loads(r["contenu"])) for r in
-                    c.execute("SELECT * FROM factures ORDER BY id DESC LIMIT 6")]
-        return page(request, "accueil.html", c, u, brouillons=brouillons, factures=factures,
-                    tb=S.tableau_de_bord(c), prets=[d for d in brouillons if not d["bloquantes"]])
+                    c.execute("SELECT * FROM factures ORDER BY id DESC LIMIT 12")]
+        stats = {
+            "brouillons": len(brouillons),
+            "a_valider": sum(1 for d in brouillons if d["bloquantes"] == 0),
+            "confirmees": c.execute("SELECT COUNT(*) FROM factures WHERE statut='CONFIRMEE' AND type='FV'").fetchone()[0],
+            "ca": c.execute("SELECT COALESCE(SUM(CASE type WHEN 'FV' THEN total_ttc ELSE -total_ttc END),0) "
+                            "FROM factures WHERE statut='CONFIRMEE'").fetchone()[0],
+        }
+        return page(request, "accueil.html", c, u, brouillons=brouillons, factures=factures, stats=stats,
+                    st=S.statistiques(c))
     return await avec_utilisateur(vue)(request)
 
 
-@app.get("/dossiers", response_class=HTMLResponse)
-async def dossiers(request: Request):
-    async def vue(request, c, u):
-        a_emettre = [dict(r, contenu=json.loads(r["contenu"])) for r in
-                     c.execute("SELECT * FROM factures WHERE statut IN ('VALIDEE','EN_ATTENTE_DGI') ORDER BY id")]
-        return page(request, "dossiers.html", c, u, brouillons=_brouillons(c, 100), a_emettre=a_emettre)
-    return await avec_utilisateur(vue)(request)
+def lister_dossiers(c, etat: str | None, limite: int = 200) -> list[dict]:
+    """Dossiers de vente, du plus récent au plus ancien, avec le client et le nombre de blocages."""
+    if etat:
+        lignes = c.execute("SELECT id FROM dossiers WHERE statut = ? ORDER BY id DESC LIMIT ?", (etat, limite))
+    else:
+        lignes = c.execute("SELECT id FROM dossiers ORDER BY id DESC LIMIT ?", (limite,))
+    res = []
+    for r in lignes.fetchall():
+        d = S.dossier(c, r["id"])
+        cl = S.client(c, d["brouillon"]["client"].get("id"))
+        d["client_nom"] = cl["nom"] if cl else (d["brouillon"]["client"].get("nom_cite") or "Client à préciser")
+        d["bloquantes"] = sum(1 for a in d["anomalies"] if a["bloquante"] and not a["resolue"])
+        res.append(d)
+    return res
 
 
 @app.get("/recherche", response_class=HTMLResponse)
@@ -298,6 +285,20 @@ async def aide_page(request: Request):
     return await avec_utilisateur(vue)(request)
 
 
+ETATS_DOSSIER = {"BROUILLON": "À vérifier", "VALIDE": "Validés", "SUPPRIME": "Supprimés", "tous": "Tous"}
+
+
+@app.get("/dossiers", response_class=HTMLResponse)
+async def liste_dossiers(request: Request, etat: str = "BROUILLON"):
+    async def vue(request, c, u):
+        choisi = etat if etat in ETATS_DOSSIER else "BROUILLON"
+        comptes = {k: n for k, n in c.execute("SELECT statut, COUNT(*) FROM dossiers GROUP BY statut")}
+        comptes["tous"] = sum(comptes.values())
+        return page(request, "dossiers.html", c, u, dossiers=lister_dossiers(c, None if choisi == "tous" else choisi),
+                    etat=choisi, etats=ETATS_DOSSIER, comptes=comptes)
+    return await avec_utilisateur(vue)(request)
+
+
 # --- Nouveau dossier -------------------------------------------------------------------------
 
 EXEMPLES = json.loads((RACINE / "data" / "exemples.json").read_text(encoding="utf-8")) \
@@ -307,7 +308,7 @@ EXEMPLES = json.loads((RACINE / "data" / "exemples.json").read_text(encoding="ut
 @app.get("/dossiers/nouveau", response_class=HTMLResponse)
 async def nouveau(request: Request):
     async def vue(request, c, u):
-        defaut = "gemini" if os.environ.get("GEMINI_API_KEY") else "regles"
+        defaut = (ia_disponibles() or ["regles"])[0]
         return page(request, "nouveau.html", c, u, exemples=EXEMPLES, extracteur_defaut=defaut)
     return await avec_utilisateur(vue)(request)
 
@@ -327,7 +328,7 @@ async def nouveau_post(request: Request):
         return S.creer_dossier(c, u, form.get("canal", "WHATSAPP"), form.get("texte_commande", ""),
                                form.get("texte_livraison", ""), form.get("extracteur", "regles"), octets, mime, nom)
     return await action(request, lambda did: f"/dossiers/{did}", "/dossiers/nouveau", f,
-                        "Brouillon créé")
+                        "Brouillon créé. Vérifiez chaque champ avant de le proposer à la validation.")
 
 
 # --- Revue d'un dossier ------------------------------------------------------------------
@@ -357,15 +358,15 @@ async def revue(request: Request, did: int):
         arts = S.articles(c)
         index = {a["id"]: a for a in arts}
         facture_id = d.get("facture_id")
+        montants = montants_par_ligne(br, arts) if d.get("totaux") else {}
         return page(request, "dossier.html", c, u, d=d, br=br, clients=S.clients(c), articles=arts, index=index,
+                    montants=montants,
                     source_commande=surligner(d["texte_commande"], cit_cmd),
                     source_livraison=surligner(d["texte_livraison"] or "", cit_bl),
                     client_choisi=S.client(c, br["client"].get("id")),
                     bloquantes=[a for a in d["anomalies"] if a["bloquante"] and not a["resolue"]],
                     proformas=[dict(r) for r in c.execute("SELECT * FROM proformas WHERE dossier_id = ?", (did,))],
-                    facture_id=facture_id,
-                    facture_statut=(c.execute("SELECT statut FROM factures WHERE id = ?", (facture_id,)).fetchone()
-                                    or [None])[0] if facture_id else None)
+                    facture_id=facture_id)
     return await avec_utilisateur(vue)(request)
 
 
@@ -374,7 +375,7 @@ async def corriger(request: Request, did: int):
     async def f(c, u, form):
         champs = {k: v for k, v in form.items() if k not in ("csrf", "version")}
         S.corriger(c, u, did, int(form["version"]), champs)
-    return await action(request, f"/dossiers/{did}", f"/dossiers/{did}", f, "Enregistré")
+    return await action(request, f"/dossiers/{did}", f"/dossiers/{did}", f, "Modifications enregistrées.")
 
 
 @app.post("/dossiers/{did}/livraison")
@@ -383,14 +384,14 @@ async def livraison(request: Request, did: int):
         if not form.get("texte_livraison", "").strip():
             raise S.Refus("Collez le texte du bon de livraison.")
         S.ajouter_livraison(c, u, did, int(form["version"]), form["texte_livraison"], form.get("extracteur", "regles"))
-    return await action(request, f"/dossiers/{did}", f"/dossiers/{did}", f, "Bon de livraison rattaché")
+    return await action(request, f"/dossiers/{did}", f"/dossiers/{did}", f, "Bon de livraison rattaché.")
 
 
 @app.post("/dossiers/{did}/decider")
 async def decider(request: Request, did: int):
     async def f(c, u, form):
         S.decider(c, u, did, int(form["version"]), form["cle"], form["choix"], form.get("justification", ""))
-    return await action(request, f"/dossiers/{did}", f"/dossiers/{did}", f, "Décision enregistrée")
+    return await action(request, f"/dossiers/{did}", f"/dossiers/{did}", f, "Décision enregistrée.")
 
 
 @app.post("/dossiers/{did}/valider")
@@ -398,14 +399,14 @@ async def valider(request: Request, did: int):
     async def f(c, u, form):
         return S.valider(c, u, did, int(form["version"]), form.get("idem"))
     return await action(request, lambda fid: f"/factures/{fid}", f"/dossiers/{did}", f,
-                        "Facture validée")
+                        "Facture validée et numérotée. Elle ne peut plus être modifiée.")
 
 
 @app.post("/dossiers/{did}/supprimer")
 async def supprimer(request: Request, did: int):
     async def f(c, u, form):
         S.supprimer_dossier(c, u, did, int(form["version"]))
-    return await action(request, "/", f"/dossiers/{did}", f, "Brouillon supprimé")
+    return await action(request, "/", f"/dossiers/{did}", f, "Brouillon supprimé.")
 
 
 @app.post("/dossiers/{did}/proforma")
@@ -464,10 +465,11 @@ async def emettre(request: Request, fid: int):
         return S.emettre(c, u, fid, form.get("idem"), simuler_coupure=form.get("coupure") == "1")
     try:
         return await action(request, f"/factures/{fid}", f"/factures/{fid}", f,
-                            lambda r: "Facture émise" if r["statut"] == "CONFIRMEE"
-                            else "Émission annulée : totaux différents")
+                            lambda r: "Facture confirmée par la DGI simulée." if r["statut"] == "CONFIRMEE"
+                            else "Émission annulée : les totaux ne correspondent pas.")
     except S.CoupureSimulee:
-        return retour(request, f"/factures/{fid}", erreur="Coupure simulée. Relancez l'application : l'émission reprendra sans doublon.")
+        return retour(request, f"/factures/{fid}", erreur="Coupure simulée : l'application s'est arrêtée pendant "
+                      "l'émission. Redémarrez-la : la facture sera terminée automatiquement, sans doublon.")
 
 
 @app.post("/factures/{fid}/avoir")
@@ -478,14 +480,14 @@ async def avoir(request: Request, fid: int):
         if form.get("emettre"):
             S.emettre(c, u, aid)
         return aid
-    return await action(request, lambda aid: f"/factures/{aid}", f"/factures/{fid}", f, "Avoir créé")
+    return await action(request, lambda aid: f"/factures/{aid}", f"/factures/{fid}", f, "Avoir créé.")
 
 
 @app.post("/factures/{fid}/accuse")
 async def accuse(request: Request, fid: int):
     async def f(c, u, form):
         S.accuser_reception(c, u, fid, form.get("canal", "WHATSAPP"))
-    return await action(request, f"/factures/{fid}", f"/factures/{fid}", f, "Accusé enregistré")
+    return await action(request, f"/factures/{fid}", f"/factures/{fid}", f, "Accusé de réception enregistré (simulé).")
 
 
 @app.post("/factures/{fid}/paiement")
@@ -497,21 +499,28 @@ async def paiement(request: Request, fid: int):
             raise S.Refus("Montant illisible.")
         return S.enregistrer_paiement(c, u, fid, montant, form.get("mode", "ESPECES"), form.get("reference", ""),
                                       form.get("idem"))
-    return await action(request, f"/factures/{fid}", f"/factures/{fid}", f, "Paiement enregistré")
+    return await action(request, f"/factures/{fid}", f"/factures/{fid}", f, "Paiement enregistré (simulé), reçu émis.")
 
 
 # --- Comptabilité, journal, référentiels, paramètres -------------------------------------------
 
 @app.get("/comptabilite", response_class=HTMLResponse)
-async def comptabilite(request: Request):
+async def comptabilite(request: Request, jour: str = ""):
     async def vue(request, c, u):
         S.exiger(u, "compta.lire")
-        impayees = []
-        for r in c.execute("SELECT id FROM factures WHERE type='FV' AND statut='CONFIRMEE' ORDER BY id"):
-            f = S.facture(c, r["id"])
-            if f["reste_a_payer"] > 0:
-                impayees.append(f)
-        return page(request, "comptabilite.html", c, u, rapport=S.rapport_du_jour(c), impayees=impayees)
+        actifs = S.jours_avec_activite(c)
+        try:
+            choisi = date.fromisoformat(jour) if jour else None
+        except ValueError:
+            choisi = None
+        if choisi is None:  # par défaut : aujourd'hui, ou le dernier jour d'activité s'il n'y en a pas aujourd'hui
+            aujourd = date.today().isoformat()
+            choisi = date.fromisoformat(aujourd if aujourd in actifs or not actifs else actifs[-1])
+        iso = choisi.isoformat()
+        precedent = max((j for j in actifs if j < iso), default=None)
+        suivant = min((j for j in actifs if j > iso), default=None)
+        return page(request, "comptabilite.html", c, u, rapport=S.rapport_du_jour(c, choisi), vc=S.vue_comptable(c),
+                    precedent=precedent, suivant=suivant, est_aujourdhui=choisi == date.today())
     return await avec_utilisateur(vue)(request)
 
 
@@ -524,13 +533,80 @@ async def ecritures(request: Request):
     return await avec_utilisateur(vue)(request)
 
 
+# Action du journal -> (phrase, catégorie, icône). La phrase suit le nom de la personne.
+ACTIONS_JOURNAL = {
+    "CONNEXION": ("s'est connecté(e)", "connexions", "sortie"),
+    "CONNEXION_REFUSEE": ("a tenté de se connecter : refusé", "connexions", "alerte"),
+    "DOSSIER_CREE": ("a créé un dossier de vente", "ventes", "brouillon"),
+    "LIVRAISON_AJOUTEE": ("a rattaché un bon de livraison", "ventes", "brouillon"),
+    "BROUILLON_CORRIGE": ("a corrigé un brouillon", "ventes", "brouillon"),
+    "ANOMALIE_TRANCHEE": ("a tranché un contrôle", "ventes", "coche"),
+    "DOSSIER_SUPPRIME": ("a supprimé un brouillon", "ventes", "alerte"),
+    "PROFORMA_CREEE": ("a produit une pro forma", "ventes", "pdf"),
+    "FACTURE_VALIDEE": ("a validé et numéroté une facture", "ventes", "cadenas"),
+    "EMISSION_DEMANDEE": ("a émis vers la DGI simulée", "ventes", "envoyer"),
+    "FACTURE_CONFIRMEE": ("a reçu la confirmation de la DGI simulée", "ventes", "facture-ok"),
+    "EMISSION_ANNULEE": ("a vu l'émission annulée par la DGI simulée", "ventes", "alerte"),
+    "AVOIR_CREE": ("a créé un avoir", "ventes", "facture"),
+    "COPIE_IMPRIMEE": ("a imprimé une copie", "ventes", "pdf"),
+    "ACCUSE_CLIENT": ("a enregistré l'accusé de réception du client", "ventes", "coche"),
+    "PAIEMENT_ENREGISTRE": ("a enregistré un paiement", "paiements", "argent"),
+    "CLIENT_MODIFIE": ("a modifié une fiche client", "administration", "gestion"),
+    "ARTICLE_MODIFIE": ("a modifié un article", "administration", "gestion"),
+    "PARAMETRES_MODIFIES": ("a modifié les paramètres", "administration", "gestion"),
+    "DEMO_REINITIALISEE": ("a réinitialisé la démonstration", "administration", "alerte"),
+}
+CATEGORIES_JOURNAL = {"": "Tout", "ventes": "Ventes", "paiements": "Paiements", "connexions": "Connexions",
+                      "administration": "Administration"}
+JOURS_SEMAINE = ["lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"]
+MOIS = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre",
+        "novembre", "décembre"]
+
+
+def _jour_long(iso: str) -> str:
+    j = date.fromisoformat(iso[:10])
+    if j == date.today():
+        return "Aujourd'hui"
+    return f"{JOURS_SEMAINE[j.weekday()].capitalize()} {j.day} {MOIS[j.month - 1]} {j.year}"
+
+
 @app.get("/journal", response_class=HTMLResponse)
-async def journal(request: Request, verifier: int = 0):
+async def journal(request: Request, verifier: int = 0, categorie: str = "", acteur: str = ""):
     async def vue(request, c, u):
-        lignes = [dict(r) for r in c.execute("SELECT * FROM journal ORDER BY id DESC LIMIT 300")]
         noms = {r["id"]: r["nom"] for r in c.execute("SELECT id, nom FROM utilisateurs")}
+        numeros = {str(r["id"]): r["numero"] for r in c.execute("SELECT id, numero FROM factures")}
+        lignes = []
+        for r in c.execute("SELECT * FROM journal ORDER BY id DESC LIMIT 400"):
+            l = dict(r)
+            phrase, cat, ico = ACTIONS_JOURNAL.get(l["action"], (l["action"].lower().replace("_", " "), "administration", "gestion"))
+            if (categorie and cat != categorie) or (acteur and l["acteur"] != acteur):
+                continue
+            try:
+                l["donnees"] = json.loads(l["details"]) if l["details"] else {}
+            except ValueError:
+                l["donnees"] = {}
+            l["details_lisibles"] = json.dumps(l["donnees"], ensure_ascii=False, indent=2)
+            genre, _, ident = l["objet"].partition(":")
+            l["lien"] = {"dossier": f"/dossiers/{ident}", "facture": f"/factures/{ident}"}.get(genre)
+            l["objet_lib"] = {"dossier": f"Dossier {ident}", "facture": numeros.get(ident, f"Facture {ident}"),
+                              "utilisateur": noms.get(ident, ident)}.get(genre, l["objet"])
+            if genre == "utilisateur" and ident == l["acteur"]:
+                l["objet_lib"] = None  # « Rodrigue s'est connecté » : inutile de répéter le nom
+            qui = {"anonyme": "Une personne inconnue", "reprise": "Le système (reprise)", "systeme": "Le système"}
+            l.update(phrase=phrase, categorie=cat, icone=ico, qui=noms.get(l["acteur"], qui.get(l["acteur"], l["acteur"])),
+                     jour=_jour_long(l["horodatage"]), heure=l["horodatage"][11:16])
+            lignes.append(l)
+        chaine = [dict(r) for r in c.execute("SELECT id, action, hash, hash_precedent FROM journal ORDER BY id DESC LIMIT 4")][::-1]
+        aujourdhui = date.today().isoformat()
+        stats = {
+            "total": c.execute("SELECT COUNT(*) FROM journal").fetchone()[0],
+            "jour": c.execute("SELECT COUNT(*) FROM journal WHERE substr(horodatage, 1, 10) = ?", (aujourdhui,)).fetchone()[0],
+            "refusees": c.execute("SELECT COUNT(*) FROM journal WHERE action = 'CONNEXION_REFUSEE'").fetchone()[0],
+            "corrections": c.execute("SELECT COUNT(*) FROM journal WHERE action IN ('BROUILLON_CORRIGE', 'ANOMALIE_TRANCHEE')").fetchone()[0],
+        }
         resultat = verifier_journal(c) if verifier else None
-        return page(request, "journal.html", c, u, lignes=lignes, noms=noms, resultat=resultat)
+        return page(request, "journal.html", c, u, lignes=lignes, noms=noms, resultat=resultat, chaine=chaine,
+                    stats=stats, categories=CATEGORIES_JOURNAL, categorie=categorie, acteur=acteur)
     return await avec_utilisateur(vue)(request)
 
 
@@ -553,7 +629,7 @@ async def maj_article(request: Request, aid: str):
             c.execute("UPDATE articles SET groupe_taxe = ?, prix_unitaire_ttc = ? WHERE id = ?", (groupe, prix, aid))
             journaliser(c, u["id"], "ARTICLE_MODIFIE", f"article:{aid}",
                         {"avant": avant, "apres": {"groupe_taxe": groupe, "prix_unitaire_ttc": prix}})
-    return await action(request, "/referentiels", "/referentiels", f, "Enregistré")
+    return await action(request, "/referentiels", "/referentiels", f, "Article mis à jour.")
 
 
 @app.post("/referentiels/client/{cid}")
@@ -567,7 +643,7 @@ async def maj_client(request: Request, cid: str):
             avant = c.execute("SELECT aib_taux FROM clients WHERE id=?", (cid,)).fetchone()[0]
             c.execute("UPDATE clients SET aib_taux = ? WHERE id = ?", (taux, cid))
             journaliser(c, u["id"], "CLIENT_MODIFIE", f"client:{cid}", {"aib_avant": avant, "aib_apres": taux})
-    return await action(request, "/referentiels", "/referentiels", f, "Enregistré")
+    return await action(request, "/referentiels", "/referentiels", f, "Client mis à jour.")
 
 
 @app.get("/parametres", response_class=HTMLResponse)
@@ -575,7 +651,7 @@ async def parametres(request: Request):
     async def vue(request, c, u):
         S.exiger(u, "parametres.ecrire")
         return page(request, "parametres.html", c, u, mode_solo=lire_parametre(c, "mode_solo", False),
-                    gemini=bool(os.environ.get("GEMINI_API_KEY")))
+                    gemini=bool(os.environ.get("GEMINI_API_KEY")), groq=bool(os.environ.get("GROQ_API_KEY")))
     return await avec_utilisateur(vue)(request)
 
 
@@ -603,7 +679,19 @@ async def parametres_post(request: Request):
             ecrire_parametre(c, "mode_solo", bool(form.get("mode_solo")))
             journaliser(c, u["id"], "PARAMETRES_MODIFIES", "entreprise",
                         {k: v for k, v in perso.items() if k != "logo"} | {"mode_solo": bool(form.get("mode_solo"))})
-    return await action(request, "/parametres", "/parametres", f, "Paramètres enregistrés")
+    return await action(request, "/parametres", "/parametres", f, "Paramètres enregistrés.")
+
+
+@app.post("/parametres/demo")
+async def charger_demo(request: Request):
+    async def f(c, u, form):
+        S.exiger(u, "demo.reinitialiser")
+        from .demo import charger
+        return charger(c)
+    r = await action(request, "/connexion", "/parametres", f,
+                     lambda res: f"Démonstration chargée : {res['factures']} factures émises, {res['a_verifier']} commandes à vérifier.")
+    request.session.pop("uid", None)
+    return r
 
 
 @app.post("/parametres/reinitialiser")
@@ -611,6 +699,6 @@ async def reinitialiser(request: Request):
     async def f(c, u, form):
         S.exiger(u, "demo.reinitialiser")
         S.reinitialiser(c, u["id"])
-    r = await action(request, "/connexion", "/parametres", f, "Démonstration réinitialisée")
+    r = await action(request, "/connexion", "/parametres", f, "Démonstration réinitialisée.")
     request.session.pop("uid", None)
     return r

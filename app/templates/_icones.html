@@ -1,0 +1,33 @@
+{# Icônes au trait (style Tabler Icons, licence MIT), dessinées en SVG intégré : aucune requête externe. #}
+{% macro icone(nom, taille=20) -%}
+<svg class="ico" width="{{ taille }}" height="{{ taille }}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+{%- if nom == 'tableau' -%}<rect x="4" y="4" width="6" height="6" rx="1"/><rect x="14" y="4" width="6" height="6" rx="1"/><rect x="4" y="14" width="6" height="6" rx="1"/><rect x="14" y="14" width="6" height="6" rx="1"/>
+{%- elif nom == 'facture' -%}<path d="M14 3v4a1 1 0 0 0 1 1h4"/><path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2z"/><path d="M9 13h6M9 17h4"/>
+{%- elif nom == 'gestion' -%}<path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 12h6M9 16h6"/>
+{%- elif nom == 'aide' -%}<circle cx="12" cy="12" r="9"/><path d="M12 17v.01M12 13.5a1.5 1.5 0 0 1 1-1.5 2.6 2.6 0 1 0-3-4"/>
+{%- elif nom == 'sortie' -%}<path d="M14 8V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h7a2 2 0 0 0 2-2v-2"/><path d="M9 12h12l-3-3M18 15l3-3"/>
+{%- elif nom == 'retour' -%}<path d="M15 6l-6 6 6 6"/>
+{%- elif nom == 'bas' -%}<path d="M6 9l6 6 6-6"/>
+{%- elif nom == 'menu' -%}<path d="M4 6h16M4 12h16M4 18h16"/>
+{%- elif nom == 'envoyer' -%}<path d="M10 14L21 3"/><path d="M21 3l-6.5 18a.55.55 0 0 1-1 0L10 14l-7-3.5a.55.55 0 0 1 0-1L21 3"/>
+{%- elif nom == 'horloge' -%}<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/>
+{%- elif nom == 'coche' -%}<circle cx="12" cy="12" r="9"/><path d="M9 12l2 2 4-4"/>
+{%- elif nom == 'alerte' -%}<path d="M12 9v4M12 17h.01"/><path d="M10.4 3.9L2.6 17.5A1.8 1.8 0 0 0 4.2 20h15.6a1.8 1.8 0 0 0 1.6-2.5L13.6 3.9a1.8 1.8 0 0 0-3.2 0z"/>
+{%- elif nom == 'cadenas' -%}<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 1 1 8 0v4"/>
+{%- elif nom == 'plus' -%}<path d="M12 5v14M5 12h14"/>
+{%- elif nom == 'pdf' -%}<path d="M14 3v4a1 1 0 0 0 1 1h4"/><path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2z"/><path d="M12 11v6M9.5 14.5L12 17l2.5-2.5"/>
+{%- elif nom == 'telephone' -%}<rect x="6" y="3" width="12" height="18" rx="2.5"/><path d="M11 17.5h2"/>
+{%- elif nom == 'banque' -%}<path d="M3 10h18L12 4z"/><path d="M5 10v8M9.5 10v8M14.5 10v8M19 10v8M3 20h18"/>
+{%- elif nom == 'cheque' -%}<rect x="2.5" y="6" width="19" height="12" rx="2"/><path d="M6 14.5c1.5-2 2.5 1 4-1s2.5 1 3.5 0M15 10h3.5"/>
+{%- elif nom == 'carte' -%}<rect x="2.5" y="5" width="19" height="14" rx="2.5"/><path d="M2.5 10h19M6.5 15h3"/>
+{%- elif nom == 'sans-contact' -%}<path d="M8.5 7.5a6 6 0 0 1 0 9M12 5a9.5 9.5 0 0 1 0 14M15.5 2.8a13 13 0 0 1 0 18.4"/>
+{%- elif nom == 'export' -%}<path d="M12 4v11M7.5 10.5L12 15l4.5-4.5"/><path d="M5 19h14"/>
+{%- elif nom == 'fleche-g' -%}<path d="M15 6l-6 6 6 6"/>
+{%- elif nom == 'fleche-d' -%}<path d="M9 6l6 6-6 6"/>
+{%- elif nom == 'loupe' -%}<circle cx="10.5" cy="10.5" r="6.5"/><path d="M20 20l-4.8-4.8"/>
+{%- elif nom == 'brouillon' -%}<path d="M14 3v4a1 1 0 0 0 1 1h4"/><path d="M10 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v3.5"/><path d="M18.4 14.6a1.9 1.9 0 0 1 2.7 2.7L17 21.4h-2.7v-2.7z"/>
+{%- elif nom == 'facture-ok' -%}<path d="M14 3v4a1 1 0 0 0 1 1h4"/><path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2z"/><path d="M9 15l2 2 4-4"/>
+{%- elif nom == 'argent' -%}<rect x="3" y="6" width="18" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M6.5 9.5v.01M17.5 14.5v.01"/>
+{%- endif -%}
+</svg>
+{%- endmacro %}

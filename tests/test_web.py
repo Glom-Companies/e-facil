@@ -23,7 +23,7 @@ def connecter(c, login):
     c.post("/deconnexion")
     page = c.get("/connexion").text
     r = c.post("/connexion", data={"login": login, "mot_de_passe": "demo2026", "csrf": csrf(page)})
-    assert r.status_code == 200 and "Se déconnecter" in r.text
+    assert r.status_code == 200 and "Bonjour" in r.text
 
 
 def champ(html, nom):
@@ -39,9 +39,8 @@ def test_parcours_complet(client):
         "texte_livraison": "BL : 10 cartons de savon, 5 sacs de riz"})
     assert r.status_code == 200 and "Brouillon de facture" in r.text
     did = re.search(r"/dossiers/(\d+)/corriger", r.text).group(1)
-    assert "<mark" in r.text and "bloquant(s)" in r.text
+    assert "<mark" in r.text and "bloque la validation" in r.text
     assert "Valider et numéroter" not in r.text  # la vendeuse ne voit pas le bouton
-    assert "réservée au responsable" in r.text
 
     # La vendeuse tente quand même de valider : refus côté serveur.
     r2 = client.post(f"/dossiers/{did}/valider", data={"csrf": csrf(r.text), "version": champ(r.text, "version")})
@@ -52,10 +51,10 @@ def test_parcours_complet(client):
     cle = re.search(r'name="cle" value="(ECART[^"]+)"', page).group(1)
     page = client.post(f"/dossiers/{did}/decider", data={"csrf": csrf(page), "version": champ(page, "version"),
                                                          "cle": cle, "choix": "facturer_livre"}).text
-    assert "aucun blocage" in page
+    assert "Aucun blocage" in page
     r = client.post(f"/dossiers/{did}/valider", data={"csrf": csrf(page), "version": champ(page, "version"),
                                                       "idem": champ(page, "idem")})
-    assert "Verrouillée" in r.text and "FV-" in r.text
+    assert "verrouillé" in r.text and "FV-" in r.text
     fid = re.search(r"/factures/(\d+)/emettre", r.text).group(1)
     r = client.post(f"/factures/{fid}/emettre", data={"csrf": csrf(r.text), "idem": champ(r.text, "idem")})
     assert "SIMU-" in r.text
@@ -65,8 +64,7 @@ def test_parcours_complet(client):
                                                     "q:0": "1", "motif": "Carton abîmé", "emettre": "1"})
     assert "FA-" in r.text and "Confirmée" in r.text
 
-    for url in ("/", "/dossiers", "/factures", "/recherche?q=Dossou", "/aide", "/journal?verifier=1", "/referentiels",
-                "/comptabilite"):
+    for url in ("/", "/factures", "/journal?verifier=1", "/referentiels", "/comptabilite"):
         assert client.get(url).status_code == 200
     assert "Journal intègre" in client.get("/journal?verifier=1").text
     assert client.get("/comptabilite/ecritures.csv").status_code == 200
@@ -86,3 +84,37 @@ def test_pages_admin(client):
     assert "Paramètres enregistrés" in r.text
     connecter(client, "aicha")
     assert "Votre rôle ne permet pas" in client.get("/parametres").text
+
+
+def test_liste_des_brouillons(client):
+    """La page des dossiers liste les brouillons, filtre par état et refuse un état inconnu sans erreur."""
+    connecter(client, "aicha")
+    page = client.get("/dossiers/nouveau").text
+    client.post("/dossiers/nouveau", data={"csrf": csrf(page), "canal": "SMS", "extracteur": "regles",
+                                           "texte_commande": "C'est Gbaguidi import. 10 sacs de farine."})
+    r = client.get("/dossiers")
+    assert r.status_code == 200 and "Gbaguidi" in r.text and "Brouillons" in r.text
+    assert client.get("/dossiers?etat=VALIDE").status_code == 200
+    assert client.get("/dossiers?etat=n_importe_quoi").status_code == 200
+
+
+def test_recherche_aide_et_demo(client):
+    connecter(client, "aicha")
+    assert client.get("/recherche?q=Dossou").status_code == 200
+    assert "Les mots de la facture" in client.get("/aide").text
+    r = client.post("/parametres/demo", data={"csrf": csrf(client.get("/dossiers/nouveau").text)})
+    assert "Votre rôle ne permet pas" in r.text
+    connecter(client, "admin")
+    r = client.post("/parametres/demo", data={"csrf": csrf(client.get("/parametres").text)})
+    assert "Démonstration chargée : 5 factures émises, 5 commandes à vérifier." in r.text
+
+
+def test_journal_filtres_et_integrite(client):
+    connecter(client, "admin")
+    client.post("/parametres/demo", data={"csrf": csrf(client.get("/parametres").text)})
+    connecter(client, "rodrigue")
+    r = client.get("/journal?categorie=paiements")
+    assert "a enregistré un paiement" in r.text and "s&#39;est connecté" not in r.text
+    r = client.get("/journal?verifier=1")
+    assert "Journal intègre" in r.text
+    assert client.get("/journal?categorie=inconnue&acteur=personne").status_code == 200

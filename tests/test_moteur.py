@@ -110,3 +110,13 @@ def test_proprietes_totaux(lignes, aib, mode):
     for g, tot in t.par_groupe.items():
         if g in ("A", "C", "E"):
             assert tot.tva == 0
+
+
+def test_montants_par_ligne_deux_lignes_du_meme_article():
+    """Deux lignes du même article (lecture en double) gardent chacune leur propre montant."""
+    from app.brouillon import montants_par_ligne
+    articles = [{"id": "A-001", "designation": "Riz", "prix_unitaire_ttc": 17500, "groupe_taxe": "B"}]
+    base = {"article_id": "A-001", "prix_cite": None, "prix_catalogue": 17500, "quantite_livree": None}
+    br = {"lignes": [dict(base, cle="l1", quantite_commandee="5"), dict(base, cle="l2", quantite_commandee="2"),
+                     dict(base, cle="l3", quantite_commandee=None)], "decisions": {}}
+    assert montants_par_ligne(br, articles) == {"l1": 87500, "l2": 35000}

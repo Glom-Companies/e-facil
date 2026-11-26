@@ -1,29 +1,35 @@
 {% extends "base.html" %}
+{% from "_icones.html" import icone %}
 {% block titre %}Aide{% endblock %}
 {% block contenu %}
 <div class="entete-page"><div><h1>Aide</h1><p class="sous">Comment ça marche, et les mots de la facture expliqués simplement.</p></div></div>
 <div class="row g-4">
   <div class="col-lg-7">
-    <div class="titre-bloc"><h2>Le parcours en 4 étapes</h2></div>
-    <div class="carte">
-      <ul class="liste">
-        <li><span class="icone-carre accent"><i class="ti ti-message-plus"></i></span><div class="l-corps"><div class="l-titre">1. Coller la commande</div><div class="l-sous">Message WhatsApp, SMS, e-mail ou photo du bon de commande. Ajoutez le bon de livraison quand il arrive.</div></div></li>
-        <li><span class="icone-carre accent"><i class="ti ti-eye-check"></i></span><div class="l-corps"><div class="l-titre">2. Vérifier le brouillon</div><div class="l-sous">Chaque information montre la phrase du client dont elle vient. Ce qui manque reste vide : complétez-le.</div></div></li>
-        <li><span class="icone-carre accent"><i class="ti ti-gavel"></i></span><div class="l-corps"><div class="l-titre">3. Trancher et valider</div><div class="l-sous">Le responsable règle les alertes (livraison incomplète, prix inhabituel, doublon…) puis valide. La facture reçoit son numéro et ne change plus.</div></div></li>
-        <li><span class="icone-carre accent"><i class="ti ti-send"></i></span><div class="l-corps"><div class="l-titre">4. Émettre</div><div class="l-sous">La facture part vers la DGI (simulée ici) et reçoit son code et son QR code. Une correction se fait ensuite par un avoir.</div></div></li>
-      </ul>
+    <div class="card h-100">
+      <div class="card-header"><h2 class="card-title">Le parcours en 4 étapes</h2></div>
+      <ol class="etapes-aide">
+        <li><span class="rond-petit">{{ icone('plus', 18) }}</span><div><strong>1. Coller la commande</strong>
+          <p>Message WhatsApp, SMS, e-mail, ou photo du bon de commande. Ajoutez le bon de livraison quand il arrive.</p></div></li>
+        <li><span class="rond-petit">{{ icone('brouillon', 18) }}</span><div><strong>2. Vérifier le brouillon</strong>
+          <p>Chaque information montre la phrase du client dont elle vient. Ce qui manque reste vide : un champ encadré en rouge est à compléter, puis « Enregistrer les corrections ».</p></div></li>
+        <li><span class="rond-petit">{{ icone('cadenas', 18) }}</span><div><strong>3. Trancher et valider</strong>
+          <p>Le responsable règle les alertes (livraison incomplète, prix inhabituel, remise, doublon…) puis valide. La facture reçoit son numéro et ne change plus.</p></div></li>
+        <li><span class="rond-petit">{{ icone('envoyer', 18) }}</span><div><strong>4. Émettre</strong>
+          <p>La facture part vers la DGI (simulée ici) et reçoit son code et son QR code. Une correction se fait ensuite par un avoir.</p></div></li>
+      </ol>
     </div>
   </div>
   <div class="col-lg-5">
-    <div class="titre-bloc"><h2>Les mots de la facture</h2></div>
-    <div class="carte">
-      <dl class="mb-0">
-        {% for terme, texte in glossaire.items() %}
-        <dt class="mt-2">{{ {'TTC':'TTC','HT':'HT','TVA':'TVA','AIB':'AIB','groupe':'Groupe de taxe','IFU':'IFU','avoir':'Avoir','proforma':'Pro forma'}[terme] }}</dt>
-        <dd class="text-secondary mb-2">{{ texte }}</dd>
-        {% endfor %}
-      </dl>
+    <div class="card h-100">
+      <div class="card-header"><h2 class="card-title">Les mots de la facture</h2></div>
+      <div class="card-body">
+        <dl class="glossaire mb-0">
+          {% set noms = {'TTC':'TTC','HT':'HT','TVA':'TVA','AIB':'AIB','groupe':'Groupe de taxe','IFU':'IFU','avoir':'Avoir','proforma':'Pro forma'} %}
+          {% for terme, texte in glossaire.items() %}<dt>{{ noms.get(terme, terme) }}</dt><dd>{{ texte }}</dd>{% endfor %}
+        </dl>
+      </div>
     </div>
   </div>
 </div>
+<p class="small text-secondary mt-4">Prototype de démonstration : aucune facture produite n'a de valeur fiscale.</p>
 {% endblock %}

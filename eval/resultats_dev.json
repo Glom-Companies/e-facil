@@ -2,7 +2,9 @@
   "corpus": "dev.jsonl",
   "sha256": "2b648540a351c429a855724eb44d7db6b6b5d559cd8d58839b93b71990961fda",
   "messages": 20,
-  "date": "2026-11-26T01:50:49",
+  "date": "2026-11-26T03:19:09",
+  "modele_gemini": "gemini-3.5-flash-lite",
+  "modele_groq": "openai/gpt-oss-120b",
   "resultats": {
     "S0": {
       "compteurs": {
@@ -101,7 +103,403 @@
         }
       },
       "erreurs": 0,
+      "secondes_par_message": 0.02
+    },
+    "S1": {
+      "compteurs": {
+        "client": {
+          "justes": 20,
+          "total": 20,
+          "inventes": 0,
+          "vides_a_tort": 0,
+          "attendus_vides": 3
+        },
+        "mode_paiement": {
+          "justes": 20,
+          "total": 20,
+          "inventes": 0,
+          "vides_a_tort": 0,
+          "attendus_vides": 1
+        },
+        "total_cite": {
+          "justes": 20,
+          "total": 20,
+          "inventes": 0,
+          "vides_a_tort": 0,
+          "attendus_vides": 17
+        },
+        "ligne_article": {
+          "justes": 44,
+          "total": 44,
+          "inventes": 0,
+          "vides_a_tort": 0,
+          "attendus_vides": 0
+        },
+        "quantite_commandee": {
+          "justes": 44,
+          "total": 44,
+          "inventes": 0,
+          "vides_a_tort": 0,
+          "attendus_vides": 2
+        },
+        "quantite_livree": {
+          "justes": 12,
+          "total": 12,
+          "inventes": 0,
+          "vides_a_tort": 0,
+          "attendus_vides": 0
+        },
+        "prix_cite": {
+          "justes": 44,
+          "total": 44,
+          "inventes": 0,
+          "vides_a_tort": 0,
+          "attendus_vides": 33
+        },
+        "sans_anomalie_bloquante": {
+          "justes": 5,
+          "total": 5
+        },
+        "anomalie:ECART_COMMANDE_LIVRAISON": {
+          "detectees": 3,
+          "total": 3
+        },
+        "anomalie:PRIX_INHABITUEL": {
+          "detectees": 2,
+          "total": 2
+        },
+        "anomalie:CLIENT_INCONNU": {
+          "detectees": 2,
+          "total": 2
+        },
+        "anomalie:QUANTITE_MANQUANTE": {
+          "detectees": 2,
+          "total": 2
+        },
+        "anomalie:CLIENT_AMBIGU": {
+          "detectees": 1,
+          "total": 1
+        },
+        "anomalie:ARTICLE_INCONNU": {
+          "detectees": 2,
+          "total": 2
+        },
+        "anomalie:TOTAL_INCOHERENT": {
+          "detectees": 2,
+          "total": 2
+        },
+        "anomalie:QUANTITE_INVALIDE": {
+          "detectees": 1,
+          "total": 1
+        },
+        "anomalie:REMISE_A_VALIDER": {
+          "detectees": 1,
+          "total": 1
+        },
+        "anomalie:INSTRUCTION_SUSPECTE": {
+          "detectees": 1,
+          "total": 1
+        }
+      },
+      "erreurs": 0,
+      "secondes_par_message": 3.86
+    },
+    "S2": {
+      "compteurs": {
+        "client": {
+          "justes": 19,
+          "total": 20,
+          "inventes": 0,
+          "vides_a_tort": 1,
+          "attendus_vides": 3
+        },
+        "mode_paiement": {
+          "justes": 19,
+          "total": 20,
+          "inventes": 0,
+          "vides_a_tort": 1,
+          "attendus_vides": 1
+        },
+        "total_cite": {
+          "justes": 20,
+          "total": 20,
+          "inventes": 0,
+          "vides_a_tort": 0,
+          "attendus_vides": 17
+        },
+        "ligne_article": {
+          "justes": 42,
+          "total": 44,
+          "inventes": 0,
+          "vides_a_tort": 2,
+          "attendus_vides": 0
+        },
+        "quantite_commandee": {
+          "justes": 43,
+          "total": 44,
+          "inventes": 0,
+          "vides_a_tort": 1,
+          "attendus_vides": 2
+        },
+        "quantite_livree": {
+          "justes": 12,
+          "total": 12,
+          "inventes": 0,
+          "vides_a_tort": 0,
+          "attendus_vides": 0
+        },
+        "prix_cite": {
+          "justes": 43,
+          "total": 44,
+          "inventes": 0,
+          "vides_a_tort": 1,
+          "attendus_vides": 33
+        },
+        "sans_anomalie_bloquante": {
+          "justes": 4,
+          "total": 5
+        },
+        "anomalie:ECART_COMMANDE_LIVRAISON": {
+          "detectees": 3,
+          "total": 3
+        },
+        "anomalie:PRIX_INHABITUEL": {
+          "detectees": 2,
+          "total": 2
+        },
+        "anomalie:CLIENT_INCONNU": {
+          "detectees": 2,
+          "total": 2
+        },
+        "anomalie:QUANTITE_MANQUANTE": {
+          "detectees": 1,
+          "total": 2
+        },
+        "anomalie:CLIENT_AMBIGU": {
+          "detectees": 1,
+          "total": 1
+        },
+        "anomalie:ARTICLE_INCONNU": {
+          "detectees": 2,
+          "total": 2
+        },
+        "anomalie:TOTAL_INCOHERENT": {
+          "detectees": 2,
+          "total": 2
+        },
+        "anomalie:QUANTITE_INVALIDE": {
+          "detectees": 1,
+          "total": 1
+        },
+        "anomalie:REMISE_A_VALIDER": {
+          "detectees": 1,
+          "total": 1
+        },
+        "anomalie:INSTRUCTION_SUSPECTE": {
+          "detectees": 1,
+          "total": 1
+        }
+      },
+      "erreurs": 0,
       "secondes_par_message": 0.03
+    },
+    "S4": {
+      "compteurs": {
+        "client": {
+          "justes": 19,
+          "total": 20,
+          "inventes": 0,
+          "vides_a_tort": 1,
+          "attendus_vides": 3
+        },
+        "mode_paiement": {
+          "justes": 19,
+          "total": 20,
+          "inventes": 0,
+          "vides_a_tort": 0,
+          "attendus_vides": 1
+        },
+        "total_cite": {
+          "justes": 20,
+          "total": 20,
+          "inventes": 0,
+          "vides_a_tort": 0,
+          "attendus_vides": 17
+        },
+        "ligne_article": {
+          "justes": 44,
+          "total": 44,
+          "inventes": 0,
+          "vides_a_tort": 0,
+          "attendus_vides": 0
+        },
+        "quantite_commandee": {
+          "justes": 44,
+          "total": 44,
+          "inventes": 0,
+          "vides_a_tort": 0,
+          "attendus_vides": 2
+        },
+        "quantite_livree": {
+          "justes": 12,
+          "total": 12,
+          "inventes": 0,
+          "vides_a_tort": 0,
+          "attendus_vides": 0
+        },
+        "prix_cite": {
+          "justes": 43,
+          "total": 44,
+          "inventes": 0,
+          "vides_a_tort": 1,
+          "attendus_vides": 33
+        },
+        "sans_anomalie_bloquante": {
+          "justes": 5,
+          "total": 5
+        },
+        "anomalie:ECART_COMMANDE_LIVRAISON": {
+          "detectees": 3,
+          "total": 3
+        },
+        "anomalie:PRIX_INHABITUEL": {
+          "detectees": 2,
+          "total": 2
+        },
+        "anomalie:CLIENT_INCONNU": {
+          "detectees": 2,
+          "total": 2
+        },
+        "anomalie:QUANTITE_MANQUANTE": {
+          "detectees": 2,
+          "total": 2
+        },
+        "anomalie:CLIENT_AMBIGU": {
+          "detectees": 1,
+          "total": 1
+        },
+        "anomalie:ARTICLE_INCONNU": {
+          "detectees": 2,
+          "total": 2
+        },
+        "anomalie:TOTAL_INCOHERENT": {
+          "detectees": 2,
+          "total": 2
+        },
+        "anomalie:QUANTITE_INVALIDE": {
+          "detectees": 1,
+          "total": 1
+        },
+        "anomalie:REMISE_A_VALIDER": {
+          "detectees": 1,
+          "total": 1
+        },
+        "anomalie:INSTRUCTION_SUSPECTE": {
+          "detectees": 1,
+          "total": 1
+        }
+      },
+      "erreurs": 0,
+      "secondes_par_message": 10.27
+    },
+    "S5": {
+      "compteurs": {
+        "client": {
+          "justes": 19,
+          "total": 20,
+          "inventes": 0,
+          "vides_a_tort": 1,
+          "attendus_vides": 3
+        },
+        "mode_paiement": {
+          "justes": 19,
+          "total": 20,
+          "inventes": 0,
+          "vides_a_tort": 0,
+          "attendus_vides": 1
+        },
+        "total_cite": {
+          "justes": 20,
+          "total": 20,
+          "inventes": 0,
+          "vides_a_tort": 0,
+          "attendus_vides": 17
+        },
+        "ligne_article": {
+          "justes": 44,
+          "total": 44,
+          "inventes": 0,
+          "vides_a_tort": 0,
+          "attendus_vides": 0
+        },
+        "quantite_commandee": {
+          "justes": 44,
+          "total": 44,
+          "inventes": 0,
+          "vides_a_tort": 0,
+          "attendus_vides": 2
+        },
+        "quantite_livree": {
+          "justes": 12,
+          "total": 12,
+          "inventes": 0,
+          "vides_a_tort": 0,
+          "attendus_vides": 0
+        },
+        "prix_cite": {
+          "justes": 42,
+          "total": 44,
+          "inventes": 0,
+          "vides_a_tort": 2,
+          "attendus_vides": 33
+        },
+        "sans_anomalie_bloquante": {
+          "justes": 5,
+          "total": 5
+        },
+        "anomalie:ECART_COMMANDE_LIVRAISON": {
+          "detectees": 3,
+          "total": 3
+        },
+        "anomalie:PRIX_INHABITUEL": {
+          "detectees": 2,
+          "total": 2
+        },
+        "anomalie:CLIENT_INCONNU": {
+          "detectees": 2,
+          "total": 2
+        },
+        "anomalie:QUANTITE_MANQUANTE": {
+          "detectees": 2,
+          "total": 2
+        },
+        "anomalie:CLIENT_AMBIGU": {
+          "detectees": 1,
+          "total": 1
+        },
+        "anomalie:ARTICLE_INCONNU": {
+          "detectees": 2,
+          "total": 2
+        },
+        "anomalie:TOTAL_INCOHERENT": {
+          "detectees": 2,
+          "total": 2
+        },
+        "anomalie:QUANTITE_INVALIDE": {
+          "detectees": 1,
+          "total": 1
+        },
+        "anomalie:REMISE_A_VALIDER": {
+          "detectees": 1,
+          "total": 1
+        },
+        "anomalie:INSTRUCTION_SUSPECTE": {
+          "detectees": 1,
+          "total": 1
+        }
+      },
+      "erreurs": 0,
+      "secondes_par_message": 0.02
     }
   }
 }

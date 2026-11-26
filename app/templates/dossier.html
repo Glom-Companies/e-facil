@@ -1,211 +1,283 @@
 {% extends "base.html" %}
+{% from "_icones.html" import icone %}
 {% block titre %}Dossier {{ d.id }}{% endblock %}
+{% block titre_haut %}Revue du dossier {{ d.id }}{% endblock %}
+{% block retour %}<a class="lien-retour" href="/" aria-label="Retour au tableau de bord">{{ icone('retour') }}</a>{% endblock %}
 {% set modifiable = d.statut == 'BROUILLON' and u.role in ('vendeur','responsable') %}
 {% set decideur = u.role == 'responsable' or (u.mode_solo and u.role == 'vendeur') %}
 {% set conf_lib = {'elevee':'sûr','moyenne':'à vérifier','faible':'incertain','absente':'absent','ambigue':'ambigu','manuelle':'saisi à la main'} %}
-
-{% macro anomalie(a) %}
-<div class="anomalie {% if a.resolue %}resolue{% elif a.bloquante %}bloquante{% else %}info{% endif %}">
-  <h3><i class="ti {{ 'ti-circle-check' if a.resolue else ICONES_CONTROLES.get(a.code, 'ti-alert-circle') }}"></i>{{ a.titre }}</h3>
-  <p>{{ a.message }}</p>
-  {% if a.resolue and a.decision %}<p class="small text-secondary mb-0">Décidé : {{ a.decision.choix|replace('_', ' ') }}{% if a.decision.justification %} — « {{ a.decision.justification }} »{% endif %}</p>{% endif %}
-  {% if a.cle_decision and not a.resolue and d.statut == 'BROUILLON' %}
-    {% if decideur %}
-    <form method="post" action="/dossiers/{{ d.id }}/decider">
-      <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="version" value="{{ d.version }}">
-      <input type="hidden" name="cle" value="{{ a.cle_decision }}">
-      {% if a.code == 'ECART_COMMANDE_LIVRAISON' %}
-        <button class="btn btn-sm btn-primary" name="choix" value="facturer_livre">Facturer le livré</button>
-      {% elif a.code == 'PRIX_INHABITUEL' %}
-        <button class="btn btn-sm btn-primary" name="choix" value="prix_catalogue">Garder le prix du catalogue</button>
-        <input class="form-control form-control-sm" name="justification" placeholder="Justification">
-        <button class="btn btn-sm btn-outline-secondary" name="choix" value="prix_cite">Appliquer le prix cité</button>
-      {% elif a.code == 'TOTAL_INCOHERENT' %}
-        <button class="btn btn-sm btn-primary" name="choix" value="total_recalcule">Facturer le total recalculé</button>
-      {% elif a.code == 'DOUBLON_PROBABLE' %}
-        <button class="btn btn-sm btn-outline-primary" name="choix" value="pas_un_doublon">Ce n'est pas un doublon</button>
-      {% elif a.code == 'REMISE_A_VALIDER' %}
-        <button class="btn btn-sm btn-primary" name="choix" value="accepter">Accorder la remise</button>
-        <button class="btn btn-sm btn-outline-secondary" name="choix" value="refuser">Refuser</button>
-      {% endif %}
-    </form>
-    {% else %}<p class="small text-secondary mb-0"><i class="ti ti-lock"></i> Réservé au responsable</p>{% endif %}
+{% set v = entreprise %}
+{% set ns = namespace(champs=[]) %}
+{% for a in d.anomalies if a.bloquante and not a.resolue and not a.cle_decision %}
+  {% if a.code in ('CLIENT_INCONNU', 'CLIENT_AMBIGU') %}{% set ns.champs = ns.champs + ['client_id'] %}
+  {% elif a.code == 'ARTICLE_INCONNU' %}{% set ns.champs = ns.champs + [(a.ligne ~ ':article_id') if a.ligne else 'nouvel_article'] %}
+  {% elif a.code in ('QUANTITE_MANQUANTE', 'QUANTITE_INVALIDE') %}{% set ns.champs = ns.champs + [a.ligne ~ ':quantite_commandee'] %}
   {% endif %}
-</div>
-{% endmacro %}
-
+{% endfor %}
+{% macro cible(a) -%}
+  {%- if a.code in ('CLIENT_INCONNU', 'CLIENT_AMBIGU') -%}client_id
+  {%- elif a.code == 'ARTICLE_INCONNU' -%}{{ (a.ligne ~ ':article_id') if a.ligne else 'nouvel_article' }}
+  {%- elif a.code in ('QUANTITE_MANQUANTE', 'QUANTITE_INVALIDE') -%}{{ a.ligne }}:quantite_commandee
+  {%- endif -%}
+{%- endmacro %}
+{% set perso = entreprise.personnalisation %}
 {% block contenu %}
-<div class="fil"><a href="/dossiers">À vérifier</a> / Dossier {{ d.id }}</div>
 <div class="entete-page">
   <div>
-    <h1>{{ client_choisi.nom if client_choisi else (br.client.nom_cite or 'Client à préciser') }} <span class="etat etat-{{ d.statut }}">{{ STATUTS[d.statut] }}</span></h1>
-    <p class="sous">{{ CANAUX.get(d.canal, d.canal) }} · {{ d.cree_le|date_fr }}</p>
+    <h1>Dossier {{ d.id }} <span class="etat etat-{{ d.statut }}">{{ STATUTS[d.statut] }}</span></h1>
+    <p class="sous">{{ CANAUX.get(d.canal, d.canal) }} · reçu le {{ d.cree_le|date_fr }} · lu par : {{ EXTRACTEURS.get(d.extracteur, d.extracteur) }}</p>
   </div>
-  {% if facture_id %}<a class="btn btn-primary" href="/factures/{{ facture_id }}"><i class="ti ti-file-invoice"></i>&nbsp;Voir la facture</a>{% endif %}
+  {% if facture_id %}<a class="btn btn-primary" href="/factures/{{ facture_id }}">Voir la facture</a>{% endif %}
 </div>
+{% if br.repli_ia %}
+<div class="alert alert-warning" role="alert"><strong>L'IA n'a pas pu lire ce message.</strong> {{ br.repli_ia }}</div>
+{% endif %}
 
-{% set etape = 4 if facture_statut == 'CONFIRMEE' else (3 if d.statut == 'VALIDE' else 2) %}
-<ol class="etapes">
-  <li class="fait"><span class="n"><i class="ti ti-check"></i></span><span><strong>Lecture</strong></span></li>
-  <li class="{{ 'fait' if etape > 2 else 'encours' }}"><span class="n">{% if etape > 2 %}<i class="ti ti-check"></i>{% else %}2{% endif %}</span><span><strong>Vérification</strong>{% if etape == 2 and bloquantes %}{{ bloquantes|length }} à régler{% endif %}</span></li>
-  <li class="{{ 'fait' if etape > 3 else ('encours' if etape == 3 else '') }}"><span class="n">{% if etape > 2 %}<i class="ti ti-check"></i>{% else %}3{% endif %}</span><span><strong>Validation</strong></span></li>
-  <li class="{{ 'fait' if etape > 3 else '' }}"><span class="n">{% if etape > 3 %}<i class="ti ti-check"></i>{% else %}4{% endif %}</span><span><strong>Émission</strong></span></li>
-</ol>
-
-<div class="row g-4">
-  <div class="col-xl-8">
-    <!-- Message du client -->
-    <div class="titre-bloc"><h2>Message du client</h2></div>
-    <div class="carte">
-      <div class="row g-3">
-        <div class="col-md-{{ '6' if d.texte_livraison or modifiable else '12' }}">
-          <div class="small fw-bold mb-1"><i class="ti ti-shopping-cart"></i> Bon de commande</div>
-          <pre class="source">{{ source_commande }}</pre>
-          {% if d.piece_jointe %}<p class="small text-secondary mt-1 mb-0"><i class="ti ti-paperclip"></i> {{ d.piece_jointe }} (texte transcrit)</p>{% endif %}
-        </div>
-        {% if d.texte_livraison or modifiable %}
-        <div class="col-md-6">
-          <div class="small fw-bold mb-1"><i class="ti ti-truck-delivery"></i> Bon de livraison</div>
-          {% if d.texte_livraison %}
-            <pre class="source">{{ source_livraison }}</pre>
-          {% else %}
-            <form method="post" action="/dossiers/{{ d.id }}/livraison">
-              <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="version" value="{{ d.version }}">
-              <input type="hidden" name="extracteur" value="{{ d.extracteur }}">
-              <textarea class="form-control mono" name="texte_livraison" rows="4" placeholder="Collez le bon de livraison"></textarea>
-              <button class="btn btn-outline-primary btn-sm mt-2" type="submit"><i class="ti ti-link"></i>&nbsp;Rattacher</button>
-            </form>
-          {% endif %}
-        </div>
-        {% endif %}
-      </div>
-    </div>
-
-    <!-- Brouillon -->
-    <div class="titre-bloc mt-4"><h2>Brouillon de facture</h2></div>
-    <form method="post" action="/dossiers/{{ d.id }}/corriger" class="carte">
+<div class="grille-revue">
+  <!-- Brouillon, mis en page comme la facture qui sera émise -->
+  <div>
+    <form method="post" action="/dossiers/{{ d.id }}/corriger" class="doc doc-brouillon">
       <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="version" value="{{ d.version }}">
-      <div class="row g-3 mb-3">
-        <div class="col-md-7">
-          <label class="form-label" for="client_id">Client <span class="conf conf-{{ br.client.confiance }}">{{ conf_lib.get(br.client.confiance, br.client.confiance) }}</span></label>
-          <select class="form-select" id="client_id" name="client_id" {% if not modifiable %}disabled{% endif %}>
-            <option value="">— Choisir le client —</option>
-            {% for c in clients %}<option value="{{ c.id }}" {% if c.id == br.client.id %}selected{% endif %}>{{ c.nom }}{% if c.id in (br.client.candidats or []) and not br.client.id %} (proposé){% endif %}</option>{% endfor %}
-          </select>
-          <span class="champ-cite">{% if br.client.citation %}<i class="ti ti-quote"></i> « {{ br.client.citation }} »{% else %}—{% endif %}</span>
-          {% if client_choisi %}<span class="champ-cite">{{ aide('IFU') }} {{ client_choisi.ifu or 'non communiqué' }} · {{ client_choisi.adresse }}{% if client_choisi.aib_taux %} · retient l'{{ aide('AIB') }} à {{ client_choisi.aib_taux }} %{% endif %}</span>{% endif %}
+
+      <div class="doc-entete">
+        <div class="doc-logo">
+          {% if perso.logo %}<img src="{{ perso.logo }}" alt="Logo {{ v.raison_sociale }}">
+          {% else %}<span aria-hidden="true">{{ (v.raison_sociale or 'e')[:1] }}</span>{% endif %}
         </div>
-        <div class="col-md-5">
-          <label class="form-label" for="mode_paiement">Paiement</label>
-          <select class="form-select" id="mode_paiement" name="mode_paiement" {% if not modifiable %}disabled{% endif %}>
-            <option value="">— Non précisé —</option>
-            {% for k, v in PAIEMENTS.items() %}<option value="{{ k }}" {% if k == br.mode_paiement.valeur %}selected{% endif %}>{{ v }}</option>{% endfor %}
-          </select>
-          <span class="champ-cite">{% if br.mode_paiement.citation %}<i class="ti ti-quote"></i> « {{ br.mode_paiement.citation }} »{% else %}—{% endif %}</span>
+        <div class="doc-vendeur">
+          <strong>{{ v.raison_sociale }}</strong>
+          {{ v.adresse }}<br>
+          {{ v.telephone }}{% if v.email %} | {{ v.email }}{% endif %}<br>
+          <span class="fort">{{ aide('IFU') }} : {{ v.ifu }}</span>
         </div>
-      </div>
-      <div class="table-responsive">
-      <table class="table-revue">
-        <thead><tr><th>Article</th><th class="num">Commandé</th><th class="num">Livré</th><th class="num">Prix {{ aide('TTC') }}</th><th class="num">Montant</th>{% if modifiable %}<th></th>{% endif %}</tr></thead>
-        <tbody>
-        {% for l in br.lignes %}
-        <tr>
-          <td class="c-article" style="min-width:15rem">
-            <select class="form-select form-select-sm" name="{{ l.cle }}:article_id" aria-label="Article" {% if not modifiable %}disabled{% endif %}>
-              <option value="">— Article inconnu —</option>
-              {% for a in articles %}<option value="{{ a.id }}" {% if a.id == l.article_id %}selected{% endif %}>{{ a.designation }}</option>{% endfor %}
-            </select>
-            <span class="champ-cite">{% if l.citation_designation %}<i class="ti ti-quote"></i> « {{ l.citation_designation }} » <span class="conf conf-{{ l.confiance_article }}">{{ conf_lib.get(l.confiance_article, '') }}</span>{% else %}ajouté à la main{% endif %}</span>
-          </td>
-          <td class="num" data-label="Commandé"><input class="form-control form-control-sm text-end" name="{{ l.cle }}:quantite_commandee" value="{{ l.quantite_commandee or '' }}" inputmode="decimal" aria-label="Quantité commandée" {% if not modifiable %}disabled{% endif %}>
-            <span class="champ-cite">{% if l.citation_quantite %}« {{ l.citation_quantite }} »{% elif l.quantite_commandee is none %}<span class="text-danger">absente</span>{% else %}saisie{% endif %}</span></td>
-          <td class="num" data-label="Livré"><input class="form-control form-control-sm text-end" name="{{ l.cle }}:quantite_livree" value="{{ l.quantite_livree if l.quantite_livree is not none else '' }}" inputmode="decimal" aria-label="Quantité livrée" placeholder="—" {% if not modifiable %}disabled{% endif %}>
-            <span class="champ-cite">{% if l.citation_livree %}BL « {{ l.citation_livree }} »{% elif l.quantite_livree is not none %}saisie{% else %}pas de BL{% endif %}</span></td>
-          <td class="num" data-label="Prix TTC">{{ l.prix_catalogue|fcfa if l.prix_catalogue else '—' }}
-            {% if l.prix_cite %}<span class="champ-cite">cité : {{ l.prix_cite|fcfa }}</span>{% endif %}</td>
-          <td class="num fw-bold" data-label="Montant">{% for t in (d.totaux.lignes if d.totaux else []) if t.article_id == l.article_id %}{{ t.montant_ttc|fcfa }}{% else %}—{% endfor %}</td>
-          {% if modifiable %}<td data-label=""><label class="small text-secondary text-nowrap"><input type="checkbox" name="{{ l.cle }}:supprimer" value="1"> retirer</label></td>{% endif %}
-        </tr>
-        {% else %}
-        <tr><td colspan="6" class="vide">Aucun article</td></tr>
-        {% endfor %}
-        {% if modifiable %}
-        <tr>
-          <td class="c-article"><select class="form-select form-select-sm" name="nouvel_article" aria-label="Ajouter un article"><option value="">+ Ajouter un article</option>{% for a in articles %}<option value="{{ a.id }}">{{ a.designation }}</option>{% endfor %}</select></td>
-          <td class="num" data-label="Quantité"><input class="form-control form-control-sm text-end" name="nouvelle_quantite" placeholder="Qté" inputmode="decimal" aria-label="Quantité de la nouvelle ligne"></td>
-          <td colspan="4"></td>
-        </tr>
-        {% endif %}
-        </tbody>
-      </table>
-      </div>
-      {% if modifiable %}<div class="mt-3"><button class="btn btn-outline-primary" type="submit"><i class="ti ti-device-floppy"></i>&nbsp;Enregistrer les corrections</button></div>{% endif %}
-    </form>
-
-    {% if br.rejets %}
-    <div class="titre-bloc mt-4"><h2>Valeurs écartées</h2></div>
-    <div class="carte small">
-      <ul class="mb-0">{% for r in br.rejets %}<li><strong>{{ r.champ }}</strong> : « {{ r.valeur }} » ({{ r.raison }})</li>{% endfor %}</ul>
-    </div>
-    {% endif %}
-  </div>
-
-  <!-- Colonne de décision -->
-  <div class="col-xl-4">
-    <div class="colonne-collante">
-      <div class="titre-bloc"><h2>Contrôles</h2>{% if bloquantes %}<span class="etat etat-ANNULEE">{{ bloquantes|length }} bloquant(s)</span>{% else %}<span class="etat etat-CONFIRMEE">aucun blocage</span>{% endif %}</div>
-      <div class="carte">
-        {% for a in d.anomalies if a.bloquante and not a.resolue %}{{ anomalie(a) }}{% endfor %}
-        {% for a in d.anomalies if not a.bloquante and not a.resolue %}{{ anomalie(a) }}{% endfor %}
-        {% for a in d.anomalies if a.resolue %}{{ anomalie(a) }}{% endfor %}
-        {% if not d.anomalies %}<p class="vide mb-0"><i class="ti ti-shield-check"></i>Aucune anomalie</p>{% endif %}
-      </div>
-
-      <div class="titre-bloc mt-4"><h2>Montants</h2></div>
-      <div class="carte">
-        {% if d.totaux %}
-        <table class="totaux">
-          {% for g, t in d.totaux.par_groupe.items() %}<tr><td class="text-secondary">{{ aide('groupe', 'Groupe ' ~ g) }}</td><td class="num">{{ t.ttc|fcfa }}</td></tr>{% endfor %}
-          <tr><td>Dont {{ aide('TVA') }}</td><td class="num">{{ d.totaux.total_tva|fcfa }}</td></tr>
-          <tr class="fort"><td>Total {{ aide('TTC') }}</td><td class="num">{{ d.totaux.total_ttc|fcfa }}</td></tr>
-          {% if d.totaux.aib_taux %}
-          <tr><td>Retenue {{ aide('AIB') }} {{ d.totaux.aib_taux }} %</td><td class="num">− {{ d.totaux.aib_montant|fcfa }}</td></tr>
-          <tr class="fort net"><td>Le client paiera</td><td class="num">{{ d.totaux.net_a_payer|fcfa }}</td></tr>
+        <div class="doc-montant">
+          <h2 class="titre-brouillon">Brouillon de facture</h2>
+          <span class="pastille-numero">N° attribué à la validation</span>
+          {% if d.totaux %}
+          <span class="lib">{% if d.totaux.aib_taux %}Net à payer{% else %}Montant total TTC{% endif %}</span>
+          <span class="val">{{ d.totaux.net_a_payer|fcfa }}</span>
+          {% else %}
+          <span class="lib">Montant</span><span class="val text-secondary">—</span>
           {% endif %}
-          {% if br.total_cite.valeur %}<tr><td class="text-secondary small">Total annoncé par le client</td><td class="num small">{{ br.total_cite.valeur|fcfa }}</td></tr>{% endif %}
-        </table>
-        {% else %}<p class="vide mb-0">—</p>{% endif %}
+        </div>
       </div>
 
-      <div class="titre-bloc mt-4"><h2>Décision</h2></div>
-      <div class="carte">
-        {% if d.statut == 'BROUILLON' %}
-          {% if decideur %}
-          <form method="post" action="/dossiers/{{ d.id }}/valider" id="form-valider">
-            <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="version" value="{{ d.version }}">
-            <input type="hidden" name="idem" value="{{ idem }}">
-            {% if u.mode_solo and u.role == 'vendeur' %}
-            <label class="form-check mb-2"><input class="form-check-input" type="checkbox" required> <span class="form-check-label small">J'ai tout relu</span></label>
-            {% endif %}
-            <button class="btn btn-primary btn-grand w-100" type="submit" {% if bloquantes %}disabled{% endif %}><i class="ti ti-circle-check"></i>&nbsp;Valider et numéroter</button>
-          </form>
-          <div class="mb-3"></div>
-          {% else %}<p class="small text-secondary"><i class="ti ti-lock"></i> Validation réservée au responsable</p>{% endif %}
-          <div class="actions">
-            <form method="post" action="/dossiers/{{ d.id }}/proforma"><input type="hidden" name="csrf" value="{{ csrf }}">
-              <button class="btn btn-sm btn-outline-secondary" type="submit" {% if not d.totaux %}disabled{% endif %}><i class="ti ti-file-text"></i>&nbsp;Pro forma</button></form>
-            {% if modifiable %}
-            <form method="post" action="/dossiers/{{ d.id }}/supprimer"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="version" value="{{ d.version }}">
-              <button class="btn btn-sm btn-ghost-danger" type="submit"><i class="ti ti-trash"></i>&nbsp;Supprimer</button></form>
+      <div class="doc-cadre">
+        <div class="doc-infos">
+          <div class="doc-dates">
+            <div>
+              <label class="lib" for="mode_paiement">Mode de paiement</label>
+              <select class="form-select mt-1" id="mode_paiement" name="mode_paiement" {% if not modifiable %}disabled{% endif %}>
+                <option value="">— Non précisé —</option>
+                {% for k, lib in PAIEMENTS.items() %}<option value="{{ k }}" {% if k == br.mode_paiement.valeur %}selected{% endif %}>{{ lib }}</option>{% endfor %}
+              </select>
+              <span class="champ-cite">{% if br.mode_paiement.citation %}Lu : « {{ br.mode_paiement.citation }} »{% else %}Non précisé dans le message{% endif %}</span>
+            </div>
+            <div><span class="lib">Reçu le</span><span class="val">{{ d.cree_le|date_fr }}</span></div>
+            <div><span class="lib">Canal</span><span class="val">{{ CANAUX.get(d.canal, d.canal) }}</span></div>
+          </div>
+          <div class="doc-client">
+            <label class="lib" for="client_id">Facturé à
+              <span class="conf conf-{{ br.client.confiance }}">{{ conf_lib.get(br.client.confiance, br.client.confiance) }}</span></label>
+            <select class="form-select form-select-lg selection-client mt-1 {% if 'client_id' in ns.champs %}a-corriger{% endif %}" id="client_id" name="client_id" {% if not modifiable %}disabled{% endif %}>
+              <option value="">— Choisir le client —</option>
+              {% for c in clients %}<option value="{{ c.id }}" {% if c.id == br.client.id %}selected{% endif %}>{{ c.nom }}{% if c.id in (br.client.candidats or []) and not br.client.id %} (proposé){% endif %}</option>{% endfor %}
+            </select>
+            <span class="champ-cite mb-2">{% if br.client.citation %}Lu dans le message : « {{ br.client.citation }} »{% else %}Non trouvé dans le message{% endif %}</span>
+            {% if client_choisi %}
+              {{ client_choisi.adresse }}<br>
+              {% if client_choisi.telephone %}{{ client_choisi.telephone }}<br>{% endif %}
+              <span class="fort">{{ aide('IFU') }} : {{ client_choisi.ifu or 'non communiqué' }}</span><br>
+              {% if client_choisi.aib_taux %}<span class="fort">Retient l'{{ aide('AIB') }} à {{ client_choisi.aib_taux }} %</span>{% endif %}
             {% endif %}
           </div>
-          {% for p in proformas %}<p class="small mt-2 mb-0"><a href="/proformas/{{ p.id }}/pdf" target="_blank" class="mono">{{ p.numero }}</a> · {{ p.cree_le|date_fr }}</p>{% endfor %}
+        </div>
+
+        <div class="table-responsive">
+          <table class="doc-lignes lignes-brouillon table-responsive-empile">
+            <colgroup><col><col class="l-qte"><col class="l-qte"><col class="l-prix"><col class="l-prix">{% if modifiable %}<col class="l-retirer">{% endif %}</colgroup>
+            <thead><tr>
+              <th>Article</th><th class="num">Commandé</th><th class="num">Livré</th><th class="num">Prix {{ aide('TTC') }}</th><th class="num">Montant</th>{% if modifiable %}<th></th>{% endif %}
+            </tr></thead>
+            <tbody>
+            {% for l in br.lignes %}
+            <tr>
+              <td class="col-article" data-label="Article">
+                <select class="form-select {% if (l.cle ~ ':article_id') in ns.champs %}a-corriger{% endif %}" name="{{ l.cle }}:article_id" aria-label="Article" {% if not modifiable %}disabled{% endif %}>
+                  <option value="">— Article inconnu —</option>
+                  {% for a in articles %}<option value="{{ a.id }}" {% if a.id == l.article_id %}selected{% endif %}>{{ a.designation }}</option>{% endfor %}
+                </select>
+                <span class="champ-cite">{% if l.citation_designation %}« {{ l.citation_designation }} » <span class="conf conf-{{ l.confiance_article }}">{{ conf_lib.get(l.confiance_article, '') }}</span>{% else %}ajouté à la main{% endif %}</span>
+              </td>
+              <td class="num col-qte" data-label="Commandé"><input class="form-control text-end {% if (l.cle ~ ':quantite_commandee') in ns.champs %}a-corriger{% endif %}" name="{{ l.cle }}:quantite_commandee" value="{{ l.quantite_commandee or '' }}" inputmode="decimal" aria-label="Quantité commandée" {% if not modifiable %}disabled{% endif %}>
+                <span class="champ-cite">{% if l.citation_quantite %}« {{ l.citation_quantite }} »{% elif l.quantite_commandee is none %}<span class="text-danger fw-semibold">absente</span>{% else %}saisie{% endif %}</span></td>
+              <td class="num col-qte" data-label="Livré"><input class="form-control text-end" name="{{ l.cle }}:quantite_livree" value="{{ l.quantite_livree if l.quantite_livree is not none else '' }}" inputmode="decimal" aria-label="Quantité livrée" placeholder="—" {% if not modifiable %}disabled{% endif %}>
+                <span class="champ-cite">{% if l.citation_livree %}BL : « {{ l.citation_livree }} »{% elif l.quantite_livree is not none %}saisie{% else %}pas de BL{% endif %}</span></td>
+              <td class="num" data-label="Prix TTC">{{ l.prix_catalogue|fcfa if l.prix_catalogue else '—' }}
+                {% if l.prix_cite %}<span class="champ-cite">cité : {{ l.prix_cite|fcfa }}</span>{% endif %}</td>
+              <td class="num fw-semibold" data-label="Montant">{% if l.cle in montants %}{{ montants[l.cle]|fcfa }}{% else %}—{% endif %}</td>
+              {% if modifiable %}<td class="case-retirer" data-label="Retirer la ligne"><label class="small text-secondary" title="Retirer cette ligne"><input type="checkbox" name="{{ l.cle }}:supprimer" value="1"><span>retirer</span></label></td>{% endif %}
+            </tr>
+            {% else %}
+            <tr><td colspan="6" class="vide">Aucun article reconnu. Ajoutez une ligne ci-dessous.</td></tr>
+            {% endfor %}
+            {% if modifiable %}
+            <tr class="ligne-ajout">
+              <td><select class="form-select {% if 'nouvel_article' in ns.champs %}a-corriger{% endif %}" name="nouvel_article" aria-label="Ajouter un article"><option value="">Ajouter un article…</option>{% for a in articles %}<option value="{{ a.id }}">{{ a.designation }}</option>{% endfor %}</select></td>
+              <td class="num"><input class="form-control text-end" name="nouvelle_quantite" placeholder="Qté" inputmode="decimal" aria-label="Quantité de la nouvelle ligne"></td>
+              <td colspan="4"></td>
+            </tr>
+            {% endif %}
+            </tbody>
+          </table>
+        </div>
+
+        {% if d.totaux %}
+        <div class="doc-totaux">
+          {% for g, t in d.totaux.par_groupe.items() %}
+          <div><span>{{ aide('groupe', 'Groupe ' ~ g) }}</span><span>{{ t.ttc|fcfa }}</span></div>
+          {% endfor %}
+          <div><span>Total HT</span><span>{{ d.totaux.total_ht|fcfa }}</span></div>
+          <div><span>Dont {{ aide('TVA') }} 18 %</span><span>{{ d.totaux.total_tva|fcfa }}</span></div>
+          <div class="fort"><span>Total {{ aide('TTC') }}</span><span>{{ d.totaux.total_ttc|fcfa }}</span></div>
+          {% if d.totaux.aib_taux %}
+          <div><span>Retenue {{ aide('AIB') }} {{ d.totaux.aib_taux }} %</span><span>− {{ d.totaux.aib_montant|fcfa }}</span></div>
+          <div class="fort net"><span>Le client vous paiera</span><span>{{ d.totaux.net_a_payer|fcfa }}</span></div>
+          {% endif %}
+          {% if br.total_cite.valeur %}<div class="small"><span>Total annoncé par le client</span><span>{{ br.total_cite.valeur|fcfa }}</span></div>{% endif %}
+        </div>
         {% else %}
-          <p class="mb-2">Ce dossier est {{ STATUTS[d.statut]|lower }}.</p>
-          {% if facture_id %}<a class="btn btn-primary w-100" href="/factures/{{ facture_id }}">Voir la facture</a>{% endif %}
+        <p class="text-secondary mt-3 mb-0 text-end">Les montants s'afficheront quand le client, les articles et les quantités seront complets.</p>
         {% endif %}
       </div>
+
+      <div class="doc-pied d-flex flex-wrap align-items-center gap-3">
+        {% if modifiable %}
+        {% if ns.champs %}<p class="consigne-correction w-100 mb-0">{{ icone('alerte', 18) }} Les champs encadrés en rouge sont à corriger. Modifiez-les, puis cliquez sur « Enregistrer les corrections ».</p>{% endif %}
+        <button class="btn btn-primary" type="submit">Enregistrer les corrections</button>
+        <span class="small text-secondary">Chaque correction est recalculée par le code et inscrite au journal.</span>
+        {% else %}
+        <span class="small text-secondary">Ce brouillon n'est plus modifiable.</span>
+        {% endif %}
+      </div>
+    </form>
+  </div>
+
+  <!-- Colonne de travail -->
+  <div class="d-flex flex-column gap-4">
+    <!-- Décision -->
+    {% if d.statut == 'BROUILLON' %}
+      {% if bloquantes %}<div class="statut-bandeau statut-rouge">{{ icone('alerte') }} {{ bloquantes|length }} contrôle(s) à trancher</div>
+      {% else %}<div class="statut-bandeau statut-vert">{{ icone('coche') }} Prêt à valider</div>{% endif %}
+    {% else %}
+      <div class="statut-bandeau statut-vert">{{ icone('cadenas') }} {{ STATUTS[d.statut] }}</div>
+    {% endif %}
+
+    <div class="card carte-action"><div class="card-body p-4">
+      {% if d.statut == 'BROUILLON' %}
+        <h2>Décision</h2>
+        {% if decideur %}
+        <form method="post" action="/dossiers/{{ d.id }}/valider" id="form-valider">
+          <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="version" value="{{ d.version }}">
+          <input type="hidden" name="idem" value="{{ idem }}">
+          {% if u.mode_solo and u.role == 'vendeur' %}
+          <label class="form-check mb-2 text-start"><input class="form-check-input" type="checkbox" required> <span class="form-check-label small">Mode solo : j'ai relu le client, les quantités et les montants.</span></label>
+          {% endif %}
+          <button class="btn btn-primary btn-large" type="submit" {% if bloquantes %}disabled{% endif %}>{{ icone('cadenas') }} Valider et numéroter la facture</button>
+        </form>
+        <p class="small text-secondary mt-2 mb-3">{% if bloquantes %}Tranchez d'abord les contrôles bloquants.{% else %}Après validation, la facture ne pourra plus être modifiée ; une correction passera par un {{ aide('avoir') }}.{% endif %}</p>
+        {% else %}<p class="small text-secondary">La validation est réservée au responsable.</p>{% endif %}
+        <div class="actions justify-content-center">
+          <form method="post" action="/dossiers/{{ d.id }}/proforma"><input type="hidden" name="csrf" value="{{ csrf }}">
+            <button class="btn btn-sm btn-blanc" type="submit" {% if not d.totaux %}disabled{% endif %}>Produire une&nbsp;{{ aide('proforma', 'pro forma') }}</button></form>
+          {% if modifiable %}
+          <form method="post" action="/dossiers/{{ d.id }}/supprimer"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="version" value="{{ d.version }}">
+            <button class="btn btn-sm btn-ghost-danger" type="submit">Supprimer le brouillon</button></form>
+          {% endif %}
+        </div>
+        {% for p in proformas %}<p class="small mt-2 mb-0"><a href="/proformas/{{ p.id }}/pdf" target="_blank" class="mono">{{ p.numero }}</a> · {{ p.cree_le|date_fr }}</p>{% endfor %}
+      {% else %}
+        <h2>Dossier {{ STATUTS[d.statut]|lower }}</h2>
+        <p class="mb-0">Ce dossier est {{ STATUTS[d.statut]|lower }}.</p>
+      {% endif %}
+    </div></div>
+
+    <!-- Contrôles -->
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Contrôles</h2>
+        <span class="ms-auto">{% if bloquantes %}<span class="etat etat-ANNULEE">{{ bloquantes|length }} bloquant(s)</span>{% else %}<span class="etat etat-CONFIRMEE">Aucun blocage</span>{% endif %}</span></div>
+      {% for a in d.anomalies %}
+      <div class="anomalie {% if a.bloquante %}bloquante{% endif %} {% if a.resolue %}resolue{% endif %}">
+        <h3>{{ a.titre }}{% if a.resolue %} · <span class="text-success">tranché</span>{% elif a.bloquante %} · <span class="text-danger">bloque la validation</span>{% endif %}</h3>
+        <p>{{ a.message }}</p>
+        {% if a.resolue and a.decision %}<p class="small text-secondary">Décision : {{ a.decision.choix }}{% if a.decision.justification %} — « {{ a.decision.justification }} »{% endif %} ({{ a.decision.le|date_fr }})</p>{% endif %}
+        {% if a.cle_decision and not a.resolue and d.statut == 'BROUILLON' %}
+          {% if decideur %}
+          <form method="post" action="/dossiers/{{ d.id }}/decider">
+            <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="version" value="{{ d.version }}">
+            <input type="hidden" name="cle" value="{{ a.cle_decision }}">
+            {% if a.code == 'ECART_COMMANDE_LIVRAISON' %}
+              <button class="btn btn-sm btn-primary" name="choix" value="facturer_livre">Facturer le livré</button>
+              <span class="small text-secondary">ou attendre le reste de la livraison</span>
+            {% elif a.code == 'PRIX_INHABITUEL' %}
+              <button class="btn btn-sm btn-contour-vert" name="choix" value="prix_catalogue">Garder le prix du catalogue</button>
+              <input class="form-control form-control-sm" style="max-width:16rem" name="justification" placeholder="Justification du prix cité">
+              <button class="btn btn-sm btn-blanc" name="choix" value="prix_cite">Appliquer le prix cité</button>
+            {% elif a.code == 'TOTAL_INCOHERENT' %}
+              <button class="btn btn-sm btn-primary" name="choix" value="total_recalcule">Facturer le total recalculé</button>
+            {% elif a.code == 'DOUBLON_PROBABLE' %}
+              <button class="btn btn-sm btn-contour-vert" name="choix" value="pas_un_doublon">Ce n'est pas un doublon</button>
+              <span class="small text-secondary">sinon, supprimez ce brouillon</span>
+            {% elif a.code == 'REMISE_A_VALIDER' %}
+              <button class="btn btn-sm btn-contour-vert" name="choix" value="accepter">Accorder la remise</button>
+              <button class="btn btn-sm btn-blanc" name="choix" value="refuser">Refuser</button>
+            {% endif %}
+          </form>
+          {% else %}<p class="small text-secondary mb-0">Décision réservée au responsable.</p>{% endif %}
+        {% elif a.bloquante and not a.resolue and modifiable and cible(a) %}
+          <button type="button" class="btn btn-sm btn-contour-vert" data-corriger="{{ cible(a) }}">Corriger dans le brouillon</button>
+          <span class="small text-secondary">puis « Enregistrer les corrections »</span>
+        {% endif %}
+      </div>
+      {% else %}
+      <p class="vide">Tous les contrôles sont passés.</p>
+      {% endfor %}
     </div>
+
+    <!-- Sources -->
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Bon de commande reçu</h2></div>
+      <div class="card-body">
+        <pre class="source">{{ source_commande }}</pre>
+        <p class="small text-secondary mt-2 mb-0">Passages surlignés : ce que la lecture a utilisé. Le texte d'origine est conservé tel quel.</p>
+        {% if d.piece_jointe %}<p class="small mt-1 mb-0">Document joint : <span class="mono">{{ d.piece_jointe }}</span> (texte transcrit ci-dessus)</p>{% endif %}
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Bon de livraison</h2></div>
+      <div class="card-body">
+        {% if d.texte_livraison %}
+          <pre class="source">{{ source_livraison }}</pre>
+        {% elif modifiable %}
+          <form method="post" action="/dossiers/{{ d.id }}/livraison">
+            <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="version" value="{{ d.version }}">
+            <input type="hidden" name="extracteur" value="{{ d.extracteur }}">
+            <textarea class="form-control mono" name="texte_livraison" rows="3" placeholder="Collez le bon de livraison signé"></textarea>
+            <button class="btn btn-contour-vert btn-sm mt-2" type="submit">Rattacher le bon de livraison</button>
+          </form>
+          <p class="small text-secondary mt-2 mb-0">Vous pouvez aussi saisir les quantités livrées directement dans le tableau.</p>
+        {% else %}<p class="text-secondary mb-0">Aucun bon de livraison.</p>{% endif %}
+      </div>
+    </div>
+    {% if br.rejets %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Valeurs écartées</h2></div>
+      <div class="card-body small">
+        <p class="text-secondary">La lecture a proposé ces valeurs, mais elles ne figurent pas dans le message. Elles ont été écartées.</p>
+        <ul class="mb-0">{% for r in br.rejets %}<li><strong>{{ r.champ }}</strong> : « {{ r.valeur }} » ({{ r.raison }})</li>{% endfor %}</ul>
+      </div>
+    </div>
+    {% endif %}
   </div>
 </div>
 {% endblock %}
@@ -213,5 +285,12 @@
 <script>
 const f = document.getElementById('form-valider');
 if (f) f.addEventListener('submit', () => { const b = f.querySelector('button'); setTimeout(() => { b.disabled = true; b.textContent = 'Validation…'; }, 0); });
+document.querySelectorAll('[data-corriger]').forEach(b => b.addEventListener('click', () => {
+  const champ = document.querySelector('[name="' + CSS.escape(b.dataset.corriger) + '"]');
+  if (!champ) return;
+  champ.scrollIntoView({behavior: 'smooth', block: 'center'});
+  champ.classList.remove('clignote'); void champ.offsetWidth; champ.classList.add('clignote');
+  setTimeout(() => champ.focus({preventScroll: true}), 350);
+}));
 </script>
 {% endblock %}

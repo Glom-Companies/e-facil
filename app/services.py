@@ -23,7 +23,7 @@ from pathlib import Path
 from . import brouillon as B
 from .db import (connecter, ecrire_parametre, initialiser_schema, journaliser, lire_parametre, maintenant,
                  prochain_numero, transaction)
-from .extraction import ErreurExtraction, extraire, normaliser_resultat
+from .extraction import EXTRACTEURS, LIT_LES_DOCUMENTS, ErreurExtraction, extraire, ia_disponibles, normaliser_resultat
 from .moteur import ErreurCalcul, Ligne, calculer, lire_quantite
 
 RACINE = Path(__file__).resolve().parent.parent
@@ -220,20 +220,18 @@ def creer_dossier(conn, u: dict, canal: str, texte_commande: str, texte_livraiso
     if not texte_commande and not octets:
         raise Refus("Collez le message de commande ou joignez un document.")
     cls, arts = clients(conn), articles(conn)
-    try:
-        brut = normaliser_resultat(extraire(extracteur, texte_commande, cls, arts, octets, mime))
-    except ErreurExtraction as e:
-        raise Refus(str(e))
+    demande = extracteur
+    brut, extracteur, repli = _lire(extracteur, texte_commande, cls, arts, octets, mime)
     if not texte_commande and brut.get("transcription"):
         texte_commande = brut["transcription"].strip()
     br = B.construire(brut, texte_commande, cls, arts, verifier=True)
     extraction_bl = None
     if texte_livraison and texte_livraison.strip():
-        try:
-            extraction_bl = normaliser_resultat(extraire(extracteur, texte_livraison, cls, arts))
-        except ErreurExtraction as e:
-            raise Refus(str(e))
+        extraction_bl, ext_bl, repli_bl = _lire(extracteur, texte_livraison, cls, arts)
+        repli = repli or repli_bl
         br = B.integrer_livraison(br, extraction_bl, texte_livraison, arts)
+    if repli:
+        br["repli_ia"] = repli
     with transaction(conn):
         cur = conn.execute(
             "INSERT INTO dossiers (canal, texte_commande, texte_livraison, piece_jointe, cree_par, cree_le, extracteur,"
@@ -242,10 +240,44 @@ def creer_dossier(conn, u: dict, canal: str, texte_commande: str, texte_livraiso
              json.dumps({"commande": brut, "livraison": extraction_bl}, ensure_ascii=False),
              json.dumps(br, ensure_ascii=False)))
         did = cur.lastrowid
-        journaliser(conn, u["id"], "DOSSIER_CREE", f"dossier:{did}",
-                    {"canal": canal, "extracteur": extracteur, "lignes": len(br["lignes"]),
-                     "valeurs_rejetees": len(br["rejets"])})
+        details = {"canal": canal, "extracteur": extracteur, "lignes": len(br["lignes"]),
+                   "valeurs_rejetees": len(br["rejets"])}
+        if brut.get("modele"):
+            details["modele"] = brut["modele"]
+        if repli:
+            details["extracteur_demande"] = demande
+            details["repli"] = repli
+        journaliser(conn, u["id"], "DOSSIER_CREE", f"dossier:{did}", details)
     return did
+
+
+def _lire(extracteur: str, texte: str, cls: list[dict], arts: list[dict],
+          octets: bytes | None = None, mime: str | None = None) -> tuple[dict, str, str | None]:
+    """Lit un document avec l'extracteur choisi, puis se replie si l'IA échoue.
+
+    Ordre : extracteur choisi, puis les autres IA en ligne configurées (celles qui savent lire
+    une photo ou un PDF s'il n'y a pas de texte), puis les règles simples s'il y a du texte.
+    Renvoie (extraction normalisée, extracteur réellement utilisé, motif du repli ou None).
+    """
+    a_du_texte = bool((texte or "").strip())
+    candidats = [extracteur]
+    if extracteur != "regles":
+        candidats += [n for n in ia_disponibles() if n != extracteur and (a_du_texte or n in LIT_LES_DOCUMENTS)]
+        if a_du_texte:
+            candidats.append("regles")
+    echecs: list[str] = []
+    for nom in candidats:
+        try:
+            brut = normaliser_resultat(extraire(nom, texte, cls, arts, octets, mime))
+        except ErreurExtraction as e:
+            echecs.append(str(e))
+            continue
+        if nom == extracteur:
+            return brut, nom, None
+        lecteur = "les règles simples (sans IA)" if nom == "regles" else EXTRACTEURS[nom]
+        motif = f"{' '.join(echecs)} Le message a été lu par {lecteur} : vérifiez chaque champ."
+        return brut, nom, motif
+    raise Refus(" ".join(echecs))
 
 
 def _enregistrer_brouillon(conn, u: dict, did: int, version: int, br: dict, action: str, details: dict) -> None:
@@ -260,11 +292,10 @@ def _enregistrer_brouillon(conn, u: dict, did: int, version: int, br: dict, acti
 def ajouter_livraison(conn, u: dict, did: int, version: int, texte: str, extracteur: str) -> None:
     exiger(u, "dossier.ecrire")
     d = _charger_dossier(conn, did)
-    try:
-        brut = normaliser_resultat(extraire(extracteur, texte, clients(conn), articles(conn)))
-    except ErreurExtraction as e:
-        raise Refus(str(e))
+    brut, _, repli = _lire(extracteur, texte, clients(conn), articles(conn))
     br = B.integrer_livraison(d["brouillon"], brut, texte, articles(conn))
+    if repli:
+        br["repli_ia"] = repli
     with transaction(conn):
         n = conn.execute("UPDATE dossiers SET brouillon = ?, texte_livraison = ?, version = version + 1 WHERE id = ?"
                          " AND version = ? AND statut = 'BROUILLON'",
@@ -645,6 +676,88 @@ def creer_proforma(conn, u: dict, did: int) -> int:
         return cur.lastrowid
 
 
+# --- Recherche (d'après Livingstone Othniel, branche dev_othniel_design) ----------------------
+
+def rechercher(conn, q: str) -> dict:
+    """Factures (numéro, client, code DGI) et dossiers (client, n° de dossier, texte du message)."""
+    q = (q or "").strip()
+    if len(q) < 2:
+        return {"dossiers": [], "factures": []}
+    motif = f"%{q}%"
+    ids_clients = [c["id"] for c in clients(conn) if B.normaliser(q) in B.normaliser(c["nom"] + " " + " ".join(c["alias"]))]
+
+    def resume(r) -> dict:
+        br = json.loads(r["brouillon"])
+        return {"id": r["id"], "statut": r["statut"], "cree_le": r["cree_le"], "canal": r["canal"],
+                "client": (client(conn, br["client"].get("id")) or {}).get("nom") or br["client"].get("nom_cite")}
+
+    dossiers = []
+    for r in conn.execute("SELECT id, brouillon, statut, cree_le, canal FROM dossiers WHERE statut != 'SUPPRIME' "
+                          "ORDER BY id DESC LIMIT 200").fetchall():
+        br = json.loads(r["brouillon"])
+        if br["client"].get("id") in ids_clients or str(r["id"]) == q.lstrip("#"):
+            dossiers.append(resume(r))
+    for r in conn.execute("SELECT id, statut, cree_le, canal, brouillon FROM dossiers WHERE statut != 'SUPPRIME' "
+                          "AND texte_commande LIKE ? ORDER BY id DESC LIMIT 20", (motif,)).fetchall():
+        if not any(d["id"] == r["id"] for d in dossiers):
+            dossiers.append(resume(r))
+    factures = [dict(r, contenu=json.loads(r["contenu"])) for r in conn.execute(
+        "SELECT * FROM factures WHERE numero LIKE ? OR contenu LIKE ? OR code_dgi LIKE ? ORDER BY id DESC LIMIT 50",
+        (motif, f'%"nom": "%{q}%', motif))]
+    return {"dossiers": dossiers[:30], "factures": factures}
+
+
+# --- Statistiques du tableau de bord ----------------------------------------------------------
+
+JOURS_COURTS = ["lun.", "mar.", "mer.", "jeu.", "ven.", "sam.", "dim."]
+
+
+def statistiques(conn, jours: int = 7, aujourd_hui: date | None = None) -> dict:
+    """Chiffres du tableau de bord : facturé par jour, encaissement, modes de paiement, garde-fous de l'IA.
+
+    Une facture annulée ne compte pas ; un avoir confirmé se déduit de sa facture.
+    """
+    fin = aujourd_hui or date.today()
+    debut = fin - timedelta(days=jours - 1)
+    par_jour = {(debut + timedelta(days=i)).isoformat(): 0 for i in range(jours)}
+    par_mode: dict[str, int] = {}
+    facture_net = 0
+    for r in conn.execute("SELECT type, statut, valide_le, total_ttc, net_a_payer, contenu FROM factures"
+                          " WHERE statut <> 'ANNULEE'"):
+        signe = -1 if r["type"] == "FA" else 1
+        jour = r["valide_le"][:10]
+        if jour in par_jour:
+            par_jour[jour] += signe * r["total_ttc"]
+        if r["statut"] == "CONFIRMEE":
+            facture_net += signe * r["net_a_payer"]
+            if r["type"] == "FV":
+                mode = json.loads(r["contenu"]).get("mode_paiement") or "AUTRE"
+                par_mode[mode] = par_mode.get(mode, 0) + r["net_a_payer"]
+    encaisse = conn.execute("SELECT COALESCE(SUM(montant), 0) FROM paiements").fetchone()[0]
+
+    lecteurs: dict[str, int] = {}
+    ia = {"valeurs_ecartees": 0, "consignes_suspectes": 0, "replis": 0, "dossiers": 0}
+    for r in conn.execute("SELECT extracteur, brouillon FROM dossiers WHERE statut <> 'SUPPRIME'"):
+        br = json.loads(r["brouillon"])
+        lecteurs[r["extracteur"]] = lecteurs.get(r["extracteur"], 0) + 1
+        ia["dossiers"] += 1
+        ia["valeurs_ecartees"] += len(br.get("rejets") or [])
+        ia["consignes_suspectes"] += 1 if br.get("instructions_suspectes") else 0
+        ia["replis"] += 1 if br.get("repli_ia") else 0
+
+    return {
+        "par_jour": [{"jour": j, "libelle": JOURS_COURTS[date.fromisoformat(j).weekday()] + " " + j[8:10],
+                      "montant": m} for j, m in par_jour.items()],
+        "max_jour": max([m for m in par_jour.values()] + [0]),
+        "total_periode": sum(par_jour.values()),
+        "encaissement": {"facture": facture_net, "encaisse": min(encaisse, max(facture_net, 0)),
+                         "reste": max(facture_net - encaisse, 0)},
+        "par_mode": sorted(par_mode.items(), key=lambda x: -x[1]),
+        "lecteurs": sorted(lecteurs.items(), key=lambda x: -x[1]),
+        "ia": ia,
+    }
+
+
 # --- Comptabilité ----------------------------------------------------------------------------
 
 def rapport_du_jour(conn, jour: date | None = None) -> dict:
@@ -667,6 +780,52 @@ def rapport_du_jour(conn, jour: date | None = None) -> dict:
     return res
 
 
+def vue_comptable(conn, aujourd_hui: date | None = None) -> dict:
+    """Données de la page Comptabilité : trésorerie, encaissements récents, comptes en T, factures non payées.
+
+    Les comptes en T reprennent exactement les écritures de l'export CSV (411, 701, 4431).
+    """
+    jour = aujourd_hui or date.today()
+    comptes = {c: {"debit": 0, "credit": 0} for c in ("411", "701", "4431")}
+    for r in conn.execute("SELECT type, contenu FROM factures WHERE statut = 'CONFIRMEE'"):
+        t = json.loads(r["contenu"])["totaux"]
+        d, cr = ("debit", "credit") if r["type"] == "FV" else ("credit", "debit")
+        comptes["411"][d] += t["total_ttc"]
+        comptes["701"][cr] += t["total_ht"]
+        comptes["4431"][cr] += t["total_tva"]
+    for c in comptes.values():
+        c["solde"] = c["debit"] - c["credit"]
+
+    impayees, a_encaisser = [], 0
+    for r in conn.execute("SELECT id FROM factures WHERE type = 'FV' AND statut = 'CONFIRMEE' ORDER BY id").fetchall():
+        f = facture(conn, r["id"])
+        if f["reste_a_payer"] > 0:
+            emise = date.fromisoformat((f["horodatage_dgi"] or f["valide_le"])[:10])
+            f["jours"] = (jour - emise).days
+            f["pct_paye"] = round(100 * f["deja_paye"] / f["net_a_payer"]) if f["net_a_payer"] else 0
+            impayees.append(f)
+            a_encaisser += f["reste_a_payer"]
+    impayees.sort(key=lambda f: -f["jours"])
+
+    paiements = [dict(r) for r in conn.execute(
+        "SELECT p.*, f.numero, f.contenu FROM paiements p JOIN factures f ON f.id = p.facture_id "
+        "ORDER BY p.enregistre_le DESC, p.id DESC LIMIT 8")]
+    for p in paiements:
+        p["client"] = json.loads(p.pop("contenu"))["client"]["nom"]
+    encaisse = conn.execute("SELECT COALESCE(SUM(montant), 0) FROM paiements").fetchone()[0]
+    nb_paiements = conn.execute("SELECT COUNT(*) FROM paiements").fetchone()[0]
+    total = encaisse + a_encaisser
+    return {"encaisse": encaisse, "a_encaisser": a_encaisser, "nb_paiements": nb_paiements,
+            "nb_impayees": len(impayees), "taux": round(100 * encaisse / total) if total else 0,
+            "comptes": comptes, "impayees": impayees, "paiements": paiements}
+
+
+def jours_avec_activite(conn) -> list[str]:
+    """Jours (AAAA-MM-JJ) où au moins un document a été confirmé, du plus ancien au plus récent."""
+    return [r[0] for r in conn.execute("SELECT DISTINCT substr(horodatage_dgi, 1, 10) FROM factures "
+                                       "WHERE statut = 'CONFIRMEE' ORDER BY 1")]
+
+
 def export_ecritures_csv(conn) -> str:
     """Écritures proposées (à faire confirmer par un comptable) : 411 client, 70x produit, 443 TVA collectée."""
     sortie = io.StringIO()
@@ -683,92 +842,3 @@ def export_ecritures_csv(conn) -> str:
                 w.writerow([r["horodatage_dgi"][:10], r["numero"], compte, libelle,
                             montant if sens == "debit" else "", montant if sens == "credit" else "", r["code_dgi"]])
     return sortie.getvalue()
-
-
-# --- Tableau de bord et recherche ----------------------------------------------------------
-
-JOURS_COURTS = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"]
-
-
-def tableau_de_bord(conn) -> dict:
-    """Chiffres du tableau de bord : activité sur 7 jours, contrôles déclenchés, encaissements attendus."""
-    aujourd_hui = date.today()
-    jours = [aujourd_hui - timedelta(days=i) for i in range(6, -1, -1)]
-    montants: dict[str, int] = {}
-    for r in conn.execute("SELECT type, total_ttc, substr(horodatage_dgi, 1, 10) AS j FROM factures "
-                          "WHERE statut = 'CONFIRMEE' AND horodatage_dgi >= ?",
-                          ((aujourd_hui - timedelta(days=13)).isoformat(),)):
-        montants[r["j"]] = montants.get(r["j"], 0) + (r["total_ttc"] if r["type"] == "FV" else -r["total_ttc"])
-    semaine = [{"libelle": f"{JOURS_COURTS[j.weekday()]} {j.day:02d}", "cette_semaine": montants.get(j.isoformat(), 0),
-                "semaine_passee": montants.get((j - timedelta(days=7)).isoformat(), 0)} for j in jours]
-    maximum = max([1] + [max(s["cette_semaine"], s["semaine_passee"]) for s in semaine])
-    for s in semaine:
-        s["h1"] = round(100 * max(s["cette_semaine"], 0) / maximum)
-        s["h2"] = round(100 * max(s["semaine_passee"], 0) / maximum)
-
-    controles: dict[str, int] = {}
-    limite = (datetime.now() - timedelta(days=7)).isoformat()
-    for r in conn.execute("SELECT id FROM dossiers WHERE statut != 'SUPPRIME' AND cree_le >= ?", (limite,)):
-        for a in analyser(conn, _charger_dossier(conn, r["id"])):
-            controles[a["code"]] = controles.get(a["code"], 0) + 1
-
-    a_encaisser, impayees = 0, []
-    for r in conn.execute("SELECT id FROM factures WHERE type = 'FV' AND statut = 'CONFIRMEE' ORDER BY id"):
-        f = facture(conn, r["id"])
-        if f["reste_a_payer"] > 0:
-            c = client(conn, f["contenu"]["client"].get("id")) or {}
-            echeance = (datetime.fromisoformat(f["valide_le"]) + timedelta(days=c.get("delai_paiement_jours", 0))).date()
-            a_encaisser += f["reste_a_payer"]
-            impayees.append({"id": f["id"], "numero": f["numero"], "client": f["contenu"]["client"]["nom"],
-                             "reste": f["reste_a_payer"], "echeance": echeance.isoformat(),
-                             "en_retard": echeance < aujourd_hui})
-    impayees.sort(key=lambda x: x["echeance"])
-    compte = lambda sql: conn.execute(sql).fetchone()[0]  # noqa: E731
-    mois = aujourd_hui.isoformat()[:7]
-    encaisse_mois = conn.execute("SELECT COALESCE(SUM(montant), 0) FROM paiements WHERE substr(enregistre_le, 1, 7) = ?",
-                                 (mois,)).fetchone()[0]
-    net_mois = conn.execute("SELECT COALESCE(SUM(CASE type WHEN 'FV' THEN net_a_payer ELSE -net_a_payer END), 0) "
-                            "FROM factures WHERE statut = 'CONFIRMEE' AND substr(horodatage_dgi, 1, 7) = ?",
-                            (mois,)).fetchone()[0]
-    return {
-        "encaisse_mois": encaisse_mois,
-        "net_mois": net_mois,
-        "taux_encaisse": round(100 * encaisse_mois / net_mois) if net_mois > 0 else 0,
-        "semaine": semaine,
-        "total_semaine": sum(s["cette_semaine"] for s in semaine),
-        "total_semaine_passee": sum(s["semaine_passee"] for s in semaine),
-        "controles": controles,
-        "a_encaisser": a_encaisser,
-        "impayees": impayees,
-        "a_emettre": compte("SELECT COUNT(*) FROM factures WHERE statut = 'VALIDEE'"),
-        "en_attente_dgi": compte("SELECT COUNT(*) FROM factures WHERE statut = 'EN_ATTENTE_DGI'"),
-        "ca_mois": compte("SELECT COALESCE(SUM(CASE type WHEN 'FV' THEN total_ttc ELSE -total_ttc END), 0) FROM factures "
-                          f"WHERE statut = 'CONFIRMEE' AND substr(horodatage_dgi, 1, 7) = '{aujourd_hui.isoformat()[:7]}'"),
-        "factures_mois": compte("SELECT COUNT(*) FROM factures WHERE statut = 'CONFIRMEE' AND type = 'FV' AND "
-                                f"substr(horodatage_dgi, 1, 7) = '{aujourd_hui.isoformat()[:7]}'"),
-    }
-
-
-def rechercher(conn, q: str) -> dict:
-    q = (q or "").strip()
-    if len(q) < 2:
-        return {"dossiers": [], "factures": []}
-    motif = f"%{q}%"
-    ids_clients = [c["id"] for c in clients(conn) if B.normaliser(q) in B.normaliser(c["nom"] + " " + " ".join(c["alias"]))]
-    dossiers = []
-    for r in conn.execute("SELECT id, brouillon, statut, cree_le, canal FROM dossiers WHERE statut != 'SUPPRIME' "
-                          "ORDER BY id DESC LIMIT 200"):
-        br = json.loads(r["brouillon"])
-        if br["client"].get("id") in ids_clients or str(r["id"]) == q.lstrip("#"):
-            dossiers.append({"id": r["id"], "statut": r["statut"], "cree_le": r["cree_le"], "canal": r["canal"],
-                             "client": (client(conn, br["client"].get("id")) or {}).get("nom") or br["client"].get("nom_cite")})
-    for r in conn.execute("SELECT id, statut, cree_le, canal, brouillon FROM dossiers WHERE statut != 'SUPPRIME' "
-                          "AND texte_commande LIKE ? ORDER BY id DESC LIMIT 20", (motif,)):
-        if not any(d["id"] == r["id"] for d in dossiers):
-            br = json.loads(r["brouillon"])
-            dossiers.append({"id": r["id"], "statut": r["statut"], "cree_le": r["cree_le"], "canal": r["canal"],
-                             "client": (client(conn, br["client"].get("id")) or {}).get("nom") or br["client"].get("nom_cite")})
-    factures = [dict(r, contenu=json.loads(r["contenu"])) for r in conn.execute(
-        "SELECT * FROM factures WHERE numero LIKE ? OR contenu LIKE ? OR code_dgi LIKE ? ORDER BY id DESC LIMIT 50",
-        (motif, f'%"nom": "%{q}%', motif))]
-    return {"dossiers": dossiers[:30], "factures": factures}

@@ -217,3 +217,59 @@ def test_paiement_et_rapport(conn):
     r = S.rapport_du_jour(conn)
     assert r["par_type"]["FV"]["ttc"] == 207_500
     assert "411" in S.export_ecritures_csv(conn)
+
+
+def test_statistiques_tableau_de_bord(conn):
+    """Facturé par jour, encaissement et garde-fous : une facture émise et payée en partie."""
+    from datetime import date
+    resp = u(conn, "rodrigue")
+    did = dossier_pret(conn)
+    fid = S.valider(conn, resp, did, version(conn, did))
+    S.emettre(conn, resp, fid)
+    S.enregistrer_paiement(conn, resp, fid, 50000, "MOBILEMONEY", "MM-TEST-0001")
+    f = S.facture(conn, fid)
+    st = S.statistiques(conn, jours=7, aujourd_hui=date.today())
+    assert len(st["par_jour"]) == 7 and st["par_jour"][-1]["montant"] == f["total_ttc"]
+    assert st["max_jour"] == f["total_ttc"] and st["total_periode"] == f["total_ttc"]
+    assert st["encaissement"] == {"facture": f["net_a_payer"], "encaisse": 50000, "reste": f["net_a_payer"] - 50000}
+    assert st["par_mode"] == [("MOBILEMONEY", f["net_a_payer"])]
+    assert st["lecteurs"] == [("regles", 1)] and st["ia"]["dossiers"] == 1
+
+
+def test_jeu_de_demonstration(conn):
+    """5 factures émises sur 5 jours distincts, journal intègre, 5 commandes à vérifier, rejouable à l'identique."""
+    from app import demo
+    assert demo.charger(conn) == {"factures": 5, "a_verifier": 5}
+    jours = {r[0][:10] for r in conn.execute("SELECT valide_le FROM factures")}
+    assert len(jours) == 5
+    assert all(r[0] == "CONFIRMEE" for r in conn.execute("SELECT statut FROM factures"))
+    assert verifier_journal(conn)[0]
+    totaux = [r[0] for r in conn.execute("SELECT total_ttc FROM factures ORDER BY id")]
+    demo.charger(conn)
+    assert [r[0] for r in conn.execute("SELECT total_ttc FROM factures ORDER BY id")] == totaux
+    from app.db import maintenant
+    assert maintenant()[:10] == __import__("datetime").date.today().isoformat()  # horloge rétablie
+
+
+def test_recherche(conn):
+    from app import demo
+    demo.charger(conn)
+    assert S.rechercher(conn, "x")["factures"] == []  # moins de deux caractères
+    r = S.rechercher(conn, "Houngbédji")
+    assert r["factures"] and r["factures"][0]["contenu"]["client"]["nom"].startswith("Supermarché Houngbédji")
+    assert S.rechercher(conn, "FV-2026-000003")["factures"][0]["numero"] == "FV-2026-000003"
+    assert any(d["client"] == "Ets Dossou et Frères" for d in S.rechercher(conn, "Dossou")["dossiers"])
+
+
+def test_vue_comptable_equilibree(conn):
+    """Comptes en T équilibrés (411 = 701 + 4431), encaissé + à encaisser = net facturé, ancienneté calculée."""
+    from app import demo
+    demo.charger(conn)
+    vc = S.vue_comptable(conn)
+    c = vc["comptes"]
+    assert c["411"]["debit"] - c["411"]["credit"] == (c["701"]["credit"] - c["701"]["debit"]) + (c["4431"]["credit"] - c["4431"]["debit"])
+    net = sum(r[0] for r in conn.execute("SELECT net_a_payer FROM factures WHERE type='FV' AND statut='CONFIRMEE'"))
+    assert vc["encaisse"] + vc["a_encaisser"] == net
+    assert vc["nb_impayees"] == 3 and all(f["jours"] >= 1 for f in vc["impayees"])
+    assert vc["impayees"] == sorted(vc["impayees"], key=lambda f: -f["jours"])
+    assert len(S.jours_avec_activite(conn)) == 5

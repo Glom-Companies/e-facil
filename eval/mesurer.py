@@ -8,7 +8,9 @@ Configurations :
     S0  règles simples, sans IA ;
     S1  IA Gemini seule (aucune vérification des citations) ;
     S2  IA Gemini + vérification des citations et des référentiels (configuration de la démo) ;
-    S3  IA locale Ollama + vérifications.
+    S3  IA locale Ollama + vérifications ;
+    S4  IA Groq seule (aucune vérification des citations) ;
+    S5  IA Groq + vérification des citations et des référentiels.
 
 Le format du corpus est décrit dans data/corpus/README.md.
 Les appels à l'IA sont mis en cache (instance/cache_extraction.json) : relancer ne coûte rien.
@@ -19,6 +21,7 @@ import argparse
 import hashlib
 import json
 import math
+import os
 import sys
 import time
 from datetime import datetime
@@ -32,7 +35,8 @@ from app import brouillon as B  # noqa: E402
 from app.extraction import ErreurExtraction, extraire, normaliser_resultat  # noqa: E402
 from app.web import _charger_env  # noqa: E402
 
-CONFIGS = {"S0": ("regles", True), "S1": ("gemini", False), "S2": ("gemini", True), "S3": ("ollama", True)}
+CONFIGS = {"S0": ("regles", True), "S1": ("gemini", False), "S2": ("gemini", True), "S3": ("ollama", True),
+           "S4": ("groq", False), "S5": ("groq", True)}
 
 
 def wilson(succes: int, n: int, z: float = 1.96) -> tuple[float, float]:
@@ -114,6 +118,10 @@ def comparer(cas: dict, br: dict, clients, articles, compteurs: dict) -> None:
 
 def main() -> None:
     _charger_env()
+    # Mesure d'un seul modèle : pas de modèle de secours, et patience face au quota par minute.
+    for prefixe in ("GEMINI_", "GROQ_"):
+        os.environ[prefixe + "MODELES_SECOURS"] = ""
+        os.environ.setdefault(prefixe + "ATTENTE_MAX", "180")
     p = argparse.ArgumentParser()
     p.add_argument("corpus", type=Path)
     p.add_argument("--configs", nargs="+", default=["S0", "S2"])
@@ -125,7 +133,9 @@ def main() -> None:
     corpus = charger(args.corpus)
     empreinte = hashlib.sha256(args.corpus.read_bytes()).hexdigest()
     rapport = {"corpus": str(args.corpus.name), "sha256": empreinte, "messages": len(corpus),
-               "date": datetime.now().isoformat(timespec="seconds"), "resultats": {}}
+               "date": datetime.now().isoformat(timespec="seconds"),
+               "modele_gemini": os.environ.get("GEMINI_MODELE") or "gemini-3.8-flash",
+               "modele_groq": os.environ.get("GROQ_MODELE") or "openai/gpt-oss-120b", "resultats": {}}
 
     for nom in args.configs:
         extracteur, verifier = CONFIGS[nom]
@@ -145,7 +155,9 @@ def main() -> None:
     sortie = RACINE / "eval" / f"resultats_{args.corpus.stem}.json"
     sortie.write_text(json.dumps(rapport, ensure_ascii=False, indent=2), encoding="utf-8")
     md = [f"# Mesure sur `{args.corpus.name}` ({len(corpus)} messages)", "",
-          f"Empreinte SHA-256 du corpus : `{empreinte}`  ", f"Date : {rapport['date']}", "",
+          f"Empreinte SHA-256 du corpus : `{empreinte}`  ", f"Date : {rapport['date']}  ",
+          f"Modèle Gemini (S1, S2) : `{rapport['modele_gemini']}`  ",
+          f"Modèle Groq (S4, S5) : `{rapport['modele_groq']}`", "",
           "## Champs extraits", "",
           "| Configuration | Champs justes | IC 95 % | Valeurs inventées | Vides à tort | Échecs d'appel |",
           "|---|---|---|---|---|---|"]

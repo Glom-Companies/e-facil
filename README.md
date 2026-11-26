@@ -21,12 +21,6 @@ copy .env.exemple .env
 .\.venv\Scripts\python -m uvicorn app.web:app --port 8000
 ```
 
-Pour une démonstration déjà remplie (3 factures émises, 5 commandes à vérifier, graphique et contrôles visibles), avant de lancer le serveur :
-
-```powershell
-.\.venv\Scripts\python -m app.demo
-```
-
 Ouvrir http://localhost:8000. Sous Linux ou macOS, remplacez `.\.venv\Scripts\python` par `.venv/bin/python`.
 
 ### Comptes de démonstration
@@ -49,9 +43,19 @@ Sans clé, l'application utilise la lecture par **règles simples** (sans IA). P
 
 Sur le palier gratuit, Google peut utiliser les contenus envoyés pour améliorer ses services : **n'envoyez que des données fictives**.
 
+**Deuxième IA gratuite : Groq** (texte seulement, très rapide, environ 1 000 requêtes par jour et par modèle) :
+1. Créez une clé sur console.groq.com, sans carte bancaire.
+2. Collez-la dans `.env` : `GROQ_API_KEY=...`.
+
+Vérifiez vos clés en un appel : `.venv/bin/python -m eval.verifier_ia`.
+
+**Repli automatique.** Chaque IA réessaie après un quota (429) ou une surcharge (503), puis passe à son modèle de secours (`GEMINI_MODELES_SECOURS`, `GROQ_MODELES_SECOURS`). Si elle échoue encore, l'autre IA prend le relais, puis les règles simples. Le dossier affiche alors un avertissement, et le journal note le repli. Une photo ou un PDF seul ne peut être lu que par Gemini.
+
 En option, un modèle local avec Ollama : `ollama pull qwen2.5:7b`, puis choisissez « IA locale ». Aucune donnée ne quitte alors la machine.
 
 ## Scénario de démonstration (5 minutes)
+
+**Jeu de démonstration.** Pour repartir d'une base réaliste (5 factures émises sur les 5 derniers jours, des paiements, 5 commandes du jour à vérifier) : `python -m app.demo`, ou, connecté en `admin`, « Paramètres » puis « Charger la démonstration ». La lecture se fait par règles simples : le résultat est identique à chaque fois et ne consomme aucun quota d'IA.
 
 1. **Aïcha** (vendeuse) : « Nouvelle commande », exemple « Dossou : livraison partielle », puis « Lire la commande ».
    - Écran de revue : passages surlignés, client reconnu, quantités citées, AIB de 1 %.
@@ -88,6 +92,10 @@ Les 36 tests couvrent :
 | S1 | IA Gemini seule, sans vérification |
 | S2 | IA Gemini avec vérification des citations et des référentiels (démo) |
 | S3 | IA locale (Ollama) avec vérifications |
+| S4 | IA Groq seule, sans vérification |
+| S5 | IA Groq avec vérifications |
+
+La mesure n'utilise jamais de modèle de secours : chaque configuration correspond à un seul modèle, indiqué dans le rapport.
 
 Le script compte les champs justes, les valeurs inventées, les champs laissés vides à tort et les anomalies détectées, avec des intervalles de confiance de Wilson. Les résultats sont écrits dans `eval/resultats_<corpus>.md`, et les réponses de l'IA sont mises en cache. Le format du corpus est décrit dans [`data/corpus/README.md`](data/corpus/README.md).
 
@@ -139,6 +147,8 @@ Paramètres modifiables : seuil de prix inhabituel (15 %), fenêtre de doublon (
 | Jinja2, MarkupSafe, itsdangerous, Starlette | BSD |
 | ReportLab (version libre) | BSD |
 | Tabler (feuille de style, chargée depuis jsDelivr) | MIT |
+| Police Inter (chargée depuis jsDelivr, @fontsource) | SIL Open Font License 1.1 |
+| Icônes (tracés repris de Tabler Icons) | MIT |
 | pytest / Hypothesis | MIT / MPL 2.0 |
 | google-genai (SDK) | Apache 2.0 |
 | Modèle Gemini (API Google AI Studio) | Conditions d'utilisation de Google |

@@ -2,7 +2,8 @@
 {% block titre %}Clients et articles{% endblock %}
 {% set editeur = u.role in ('comptable','admin') %}
 {% block contenu %}
-<div class="entete-page"><div><h1>Clients et articles</h1></div></div>
+<div class="entete-page"><div><h1>Clients et articles</h1>
+  <p class="sous">Le {{ aide('groupe', 'groupe de taxe') }} de chaque article et l'{{ aide('AIB') }} de chaque client sont réglés ici, une fois, par la comptable.</p></div></div>
 <div class="card">
   <div class="card-header"><h2 class="card-title">Articles</h2></div>
   <div class="table-responsive">
@@ -11,7 +12,7 @@
     <tbody>
     {% for a in articles %}
     <tr>
-      <td class="mono">{{ a.id }}</td><td>{{ a.designation }}</td><td>{{ a.unite }}</td>
+      <td class="mono">{{ a.id }}</td><td>{{ a.designation }}<span class="champ-cite">Noms reconnus : {{ a.alias|join(', ') }}</span></td><td>{{ a.unite }}</td>
       <td>{% if editeur %}<select class="form-select form-select-sm" form="fa-{{ a.id }}" name="groupe_taxe" aria-label="Groupe">{% for g in 'ABCDE' %}<option {% if g == a.groupe_taxe %}selected{% endif %}>{{ g }}</option>{% endfor %}</select>{% else %}{{ a.groupe_taxe }}{% endif %}</td>
       <td class="num">{% if editeur %}<input class="form-control form-control-sm text-end" form="fa-{{ a.id }}" name="prix_unitaire_ttc" value="{{ a.prix_unitaire_ttc }}" inputmode="numeric" aria-label="Prix TTC">{% else %}{{ a.prix_unitaire_ttc|fcfa }}{% endif %}</td>
       {% if editeur %}<td><form method="post" id="fa-{{ a.id }}" action="/referentiels/article/{{ a.id }}"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn btn-sm btn-outline-primary" type="submit">Enregistrer</button></form></td>{% endif %}
@@ -29,7 +30,7 @@
     <tbody>
     {% for c in clients %}
     <tr>
-      <td class="mono">{{ c.id }}</td><td>{{ c.nom }}<span class="champ-cite">{{ c.adresse }}</span></td>
+      <td class="mono">{{ c.id }}</td><td>{{ c.nom }}<span class="champ-cite">{{ c.adresse }} · appelé : {{ c.alias|join(', ') }}</span></td>
       <td class="mono">{{ c.ifu or '—' }}</td><td class="small">{{ c.type|replace('_', ' ')|lower }}</td>
       <td>{% if editeur %}<select class="form-select form-select-sm" form="fc-{{ c.id }}" name="aib_taux" aria-label="AIB">{% for t in (0, 1, 5) %}<option value="{{ t }}" {% if t == c.aib_taux %}selected{% endif %}>{{ t }} %</option>{% endfor %}</select>{% else %}{{ c.aib_taux }} %{% endif %}</td>
       {% if editeur %}<td><form method="post" id="fc-{{ c.id }}" action="/referentiels/client/{{ c.id }}"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn btn-sm btn-outline-primary" type="submit">Enregistrer</button></form></td>{% endif %}

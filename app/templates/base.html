@@ -1,80 +1,96 @@
 <!doctype html>
+{% from "_icones.html" import icone %}
 <html lang="fr">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block titre %}Facturation{% endblock %} · e-FACIL</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap">
+  <title>{% block titre %}Facturation{% endblock %} · {{ entreprise.raison_sociale or "Facturation PME" }}</title>
+  <link rel="icon" type="image/svg+xml" href="/static/img/icone.svg">
+  <link rel="apple-touch-icon" href="/static/img/icone-512.png">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/core@1.0.0-beta20/dist/css/tabler.min.css">
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
-  <link rel="stylesheet" href="/static/app.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource-variable/inter@5/index.css">
+  <link rel="stylesheet" href="/static/app.css?v={{ version_css() }}">
 </head>
 <body>
 {% if u %}
 {% set p = request.url.path %}
-<div class="coquille">
-  <aside class="lateral" id="lateral" aria-label="Navigation">
-    <a class="logo" href="/">e-<span>FACIL</span></a>
-    <div class="entreprise-chip"><strong>{{ entreprise.raison_sociale }}</strong>IFU {{ entreprise.ifu }}</div>
-    <ul class="menu">
-      <li><a href="/" class="{% if p == '/' %}actif{% endif %}"><i class="ti ti-layout-dashboard" aria-hidden="true"></i>Tableau de bord</a></li>
-      {% if u.role in ('vendeur', 'responsable') %}
-      <li><a href="/dossiers/nouveau" class="{% if p == '/dossiers/nouveau' %}actif{% endif %}"><i class="ti ti-message-plus" aria-hidden="true"></i>Nouvelle commande</a></li>
-      {% endif %}
-      <li><a href="/dossiers" class="{% if p.startswith('/dossiers') and p != '/dossiers/nouveau' %}actif{% endif %}"><i class="ti ti-clipboard-check" aria-hidden="true"></i>À vérifier{% if nb_a_traiter %}<span class="badge-menu">{{ nb_a_traiter }}</span>{% endif %}</a></li>
-      <li><a href="/factures" class="{% if p.startswith('/factures') %}actif{% endif %}"><i class="ti ti-file-invoice" aria-hidden="true"></i>Factures</a></li>
-      {% if u.role in ('comptable', 'responsable', 'admin') %}
-      <li><a href="/comptabilite" class="{% if p.startswith('/comptabilite') %}actif{% endif %}"><i class="ti ti-report-money" aria-hidden="true"></i>Comptabilité</a></li>
-      {% endif %}
-      <li><a href="/referentiels" class="{% if p.startswith('/referentiels') %}actif{% endif %}"><i class="ti ti-users" aria-hidden="true"></i>Clients et articles</a></li>
-      <li><a href="/journal" class="{% if p.startswith('/journal') %}actif{% endif %}"><i class="ti ti-shield-check" aria-hidden="true"></i>Journal d'audit</a></li>
-      <li><a href="/aide" class="{% if p.startswith('/aide') %}actif{% endif %}"><i class="ti ti-help-circle" aria-hidden="true"></i>Aide</a></li>
-      {% if u.role == 'admin' %}
-      <li><a href="/parametres" class="{% if p.startswith('/parametres') %}actif{% endif %}"><i class="ti ti-settings" aria-hidden="true"></i>Paramètres</a></li>
-      {% endif %}
-    </ul>
+<div class="coque">
+  <aside class="lateral" id="menu" aria-label="Menu principal">
+    <a href="/" class="logo">
+      <img src="/static/img/icone.svg" alt="" width="36" height="36">
+      <span>e-<span class="facil">FACIL</span><small>{{ entreprise.raison_sociale }}</small></span>
+    </a>
+    <nav class="nav-lat">
+      <a class="nav-lien {% if p == '/' %}actif{% endif %}" href="/">{{ icone('tableau') }}<span>Tableau de bord</span></a>
+
+      <details class="nav-groupe" {% if p.startswith('/dossiers') or p.startswith('/factures') or p.startswith('/referentiels') %}open{% endif %}>
+        <summary class="nav-lien {% if p.startswith('/dossiers') or p.startswith('/factures') or p.startswith('/referentiels') %}groupe-actif{% endif %}">
+          {{ icone('facture') }}<span>Facturation</span>{{ icone('bas', 16) }}</summary>
+        <div class="nav-sous">
+          {% if u.role in ('vendeur', 'responsable') %}
+          <a class="{% if p == '/dossiers/nouveau' %}actif{% endif %}" href="/dossiers/nouveau">Nouvelle commande</a>
+          {% endif %}
+          <a class="{% if p.startswith('/dossiers') and p != '/dossiers/nouveau' %}actif{% endif %}" href="/dossiers">Brouillons{% if nb_brouillons %} <span class="compteur">{{ nb_brouillons }}</span>{% endif %}</a>
+          <a class="{% if p.startswith('/factures') %}actif{% endif %}" href="/factures">Factures et avoirs</a>
+          <a class="{% if p.startswith('/referentiels') %}actif{% endif %}" href="/referentiels">Clients et articles</a>
+        </div>
+      </details>
+
+      <details class="nav-groupe" {% if p.startswith('/comptabilite') or p.startswith('/journal') or p.startswith('/parametres') %}open{% endif %}>
+        <summary class="nav-lien {% if p.startswith('/comptabilite') or p.startswith('/journal') or p.startswith('/parametres') %}groupe-actif{% endif %}">
+          {{ icone('gestion') }}<span>Gestion</span>{{ icone('bas', 16) }}</summary>
+        <div class="nav-sous">
+          {% if u.role in ('comptable', 'responsable', 'admin') %}
+          <a class="{% if p.startswith('/comptabilite') %}actif{% endif %}" href="/comptabilite">Comptabilité</a>
+          {% endif %}
+          <a class="{% if p.startswith('/journal') %}actif{% endif %}" href="/journal">Journal d'audit</a>
+          {% if u.role == 'admin' %}
+          <a class="{% if p.startswith('/parametres') %}actif{% endif %}" href="/parametres">Paramètres</a>
+          {% endif %}
+        </div>
+      </details>
+    </nav>
     <div class="lateral-bas">
-      <form method="post" action="/deconnexion"><button class="btn-quitter" type="submit"><i class="ti ti-logout" aria-hidden="true"></i>Se déconnecter</button></form>
-      <div class="profil">
-        <span class="avatar-rond" aria-hidden="true">{{ u.nom[:1] }}</span>
-        <span><strong>{{ u.nom }}</strong><small>{{ ROLES[u.role] }}{% if u.mode_solo %} · mode solo{% endif %}</small></span>
-      </div>
+      <p class="mention-simu">{{ icone('alerte', 16) }}<span>Prototype : données fictives, émission DGI simulée. Aucune valeur fiscale.</span></p>
+      <a class="nav-lien {% if p == '/aide' %}actif{% endif %}" href="/aide">{{ icone('aide') }}<span>Aide</span></a>
+      <form method="post" action="/deconnexion"><button class="nav-lien" type="submit">{{ icone('sortie') }}<span>Se déconnecter</span></button></form>
     </div>
   </aside>
+  <div class="voile" onclick="document.body.classList.remove('menu-ouvert')"></div>
+
   <div class="principal">
-    <header class="entete">
-      <button class="bouton-menu" type="button" aria-label="Ouvrir le menu" onclick="document.getElementById('lateral').classList.toggle('ouvert')"><i class="ti ti-menu-2"></i></button>
-      <div class="bloc-salut">
-        <p class="salut">Bonjour {{ u.nom }}</p>
-        <span class="date"><i class="ti ti-chevrons-right" aria-hidden="true"></i>{{ aujourdhui }}</span>
-      </div>
-      <div class="entete-droite">
-        <span class="bandeau-simulation p-0"><span class="pastille" title="Données fictives, émission DGI simulée, aucune valeur fiscale">Simulation</span></span>
-        <a class="cloche" href="/dossiers" aria-label="{{ nb_a_traiter }} dossier(s) à traiter"><i class="ti ti-bell"></i>{% if nb_a_traiter %}<span class="point">{{ nb_a_traiter }}</span>{% endif %}</a>
-        <form class="recherche" method="get" action="/recherche" role="search">
-          <input name="q" value="{{ request.query_params.get('q', '') }}" placeholder="Rechercher…" aria-label="Rechercher un client, une facture ou un code DGI">
-          <i class="ti ti-search" aria-hidden="true"></i>
-        </form>
+    <header class="haut">
+      <button class="bouton-menu" type="button" aria-label="Ouvrir le menu" onclick="document.body.classList.toggle('menu-ouvert')">{{ icone('menu') }}</button>
+      {% block retour %}{% endblock %}
+      <p class="haut-titre">{% block titre_haut %}{{ self.titre() }}{% endblock %}</p>
+      <form class="recherche-haut" method="get" action="/recherche" role="search">
+        {{ icone('loupe', 18) }}<input type="search" name="q" placeholder="Rechercher un client, une facture…" aria-label="Rechercher" value="{{ request.query_params.get('q', '') if p == '/recherche' else '' }}">
+      </form>
+      <span class="pastille-simu">Simulation</span>
+      <div class="profil">
+        <span class="avatar-rond" aria-hidden="true">{{ u.nom[:1] }}</span>
+        <span class="d-none d-sm-block"><strong>{{ u.nom }}</strong><small>{{ ROLES[u.role] }}{% if u.mode_solo %} · solo{% endif %}</small></span>
       </div>
     </header>
     <main class="contenu">
-      {% if flash %}<div class="alert alert-success" role="status"><i class="ti ti-circle-check"></i> {{ flash }}</div>{% endif %}
-      {% if erreur %}<div class="alert alert-danger" role="alert"><i class="ti ti-alert-triangle"></i> {{ erreur }}</div>{% endif %}
+      {% if flash %}<div class="alert alert-success" role="status">{{ flash }}</div>{% endif %}
+      {% if erreur %}<div class="alert alert-danger" role="alert">{{ erreur }}</div>{% endif %}
       {% block contenu %}{% endblock %}
     </main>
-    <footer class="pied">e-FACIL · BillGenius</footer>
+    <footer class="pied"><strong>e-FACIL</strong> par l'équipe BillGenius · prototype BWAI'2026, cas 2 · Les factures produites n'ont aucune valeur fiscale.</footer>
   </div>
 </div>
 {% else %}
-  {% block public %}{% endblock %}
+{% block public %}
+<div class="bandeau-simulation">Prototype de démonstration · données fictives · émission DGI simulée</div>
+<main class="contenu contenu-seul">
+  {% if flash %}<div class="alert alert-success" role="status">{{ flash }}</div>{% endif %}
+  {% if erreur %}<div class="alert alert-danger" role="alert">{{ erreur }}</div>{% endif %}
+  {% block contenu_public %}{{ self.contenu() }}{% endblock %}
+</main>
+<footer class="pied"><strong>e-FACIL</strong> par l'équipe BillGenius · prototype BWAI'2026, cas 2 · Les factures produites n'ont aucune valeur fiscale.</footer>
+{% endblock %}
 {% endif %}
-<script>
-document.addEventListener('click', e => {
-  const l = document.getElementById('lateral');
-  if (l && l.classList.contains('ouvert') && !l.contains(e.target) && !e.target.closest('.bouton-menu')) l.classList.remove('ouvert');
-});
-</script>
 {% block scripts %}{% endblock %}
 </body>
 </html>

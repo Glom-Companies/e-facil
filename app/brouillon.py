@@ -187,7 +187,11 @@ def lignes_facturables(brouillon: dict, articles: list[dict], quantites: str = "
     d_remise = brouillon.get("decisions", {}).get("REMISE_A_VALIDER")
     taux_remise = Decimal(str(remise["valeur"])) if (remise and d_remise and d_remise.get("acceptee")
                                                       and remise.get("type") == "POURCENTAGE") else Decimal(0)
-    lignes = []
+    return [x for _, x in _lignes_avec_cle(brouillon, index, taux_remise, quantites)]
+
+
+def _lignes_avec_cle(brouillon: dict, index: dict, taux_remise: Decimal, quantites: str):
+    """(clé de la ligne du brouillon, Ligne facturable), dans l'ordre du brouillon."""
     for l in brouillon["lignes"]:
         art = index.get(l["article_id"])
         if not art:
@@ -200,8 +204,17 @@ def lignes_facturables(brouillon: dict, articles: list[dict], quantites: str = "
         pu = prix_retenu(l, brouillon.get("decisions", {}))
         if taux_remise:
             pu = int((Decimal(pu) * (100 - taux_remise) / 100).quantize(Decimal(1), rounding="ROUND_HALF_UP"))
-        lignes.append(Ligne(art["designation"], lire_quantite(q), pu, art["groupe_taxe"], art["id"]))
-    return lignes
+        yield l.get("cle"), Ligne(art["designation"], lire_quantite(q), pu, art["groupe_taxe"], art["id"])
+
+
+def montants_par_ligne(brouillon: dict, articles: list[dict]) -> dict:
+    """Montant TTC de chaque ligne du brouillon, par clé (deux lignes du même article restent distinctes)."""
+    index = {a["id"]: a for a in articles}
+    remise = brouillon.get("remise_demandee")
+    d_remise = brouillon.get("decisions", {}).get("REMISE_A_VALIDER")
+    taux_remise = Decimal(str(remise["valeur"])) if (remise and d_remise and d_remise.get("acceptee")
+                                                      and remise.get("type") == "POURCENTAGE") else Decimal(0)
+    return {cle: ligne.montant_ttc for cle, ligne in _lignes_avec_cle(brouillon, index, taux_remise, "facturees")}
 
 
 def anomalies(brouillon: dict, clients: list[dict], articles: list[dict], doublons: list[int] | None = None,

@@ -1,152 +1,233 @@
 {% extends "base.html" %}
+{% from "_icones.html" import icone %}
 {% set c = f.contenu %}
 {% set t = c.totaux %}
+{% set v = c.vendeur or entreprise %}
+{% set perso = entreprise.personnalisation %}
+{% set libelle = 'Avoir' if f.type == 'FA' else 'Facture' %}
+{% set peut_payer = f.type == 'FV' and f.statut == 'CONFIRMEE' and f.reste_a_payer > 0 and u.role in ('responsable','comptable') %}
 {% block titre %}{{ f.numero }}{% endblock %}
+{% block titre_haut %}Détail {% if f.type == 'FA' %}de l'avoir{% else %}de la facture{% endif %}{% endblock %}
+{% block retour %}<a class="lien-retour" href="/factures" aria-label="Retour aux factures">{{ icone('retour') }}</a>{% endblock %}
 {% block contenu %}
-<div class="fil"><a href="/factures">Factures</a> / {{ f.numero }}</div>
 <div class="entete-page">
   <div>
-    <h1>{% if f.type == 'FA' %}Avoir{% else %}Facture{% endif %} <span class="mono">{{ f.numero }}</span> <span class="etat etat-{{ f.statut }}">{{ STATUTS[f.statut] }}</span> <span class="etat" style="background:#eef0f2;color:var(--gris)" title="Ni l'application ni la base de données n'acceptent de la modifier"><i class="ti ti-lock"></i> Verrouillée</span></h1>
-    <p class="sous">{{ c.client.nom }} · validée le {{ f.valide_le|date_fr }}{% if f.dossier_id %} · <a href="/dossiers/{{ f.dossier_id }}">dossier {{ f.dossier_id }}</a>{% endif %}
-      {% if origine %} · sur la facture <a class="mono" href="/factures/{{ origine.id }}">{{ origine.numero }}</a>{% endif %}</p>
+    <h1>{{ libelle }} n° {{ f.numero }}</h1>
+    <p class="sous">
+      {% if f.type == 'FV' and f.statut == 'CONFIRMEE' and f.reste_a_payer <= 0 and f.paiements %}Payée le {{ f.paiements[-1].enregistre_le|date_fr }}
+      {% else %}Validée le {{ f.valide_le|date_fr }}{% endif %} · {{ c.client.nom }}
+      {% if origine %} · sur la facture <a class="mono" href="/factures/{{ origine.id }}">{{ origine.numero }}</a>{% endif %}
+    </p>
   </div>
   <div class="actions">
-    <a class="btn btn-primary" href="/factures/{{ f.id }}/pdf" target="_blank">Ouvrir le PDF</a>
-    {% if f.statut == 'CONFIRMEE' %}<a class="btn btn-outline-secondary" href="/factures/{{ f.id }}/pdf?copie=1" target="_blank">Imprimer une copie</a>{% endif %}
+    <details class="deroulant">
+      <summary class="btn btn-blanc">Plus d'options {{ icone('bas', 16) }}</summary>
+      <div class="deroulant-menu">
+        <a href="/factures/{{ f.id }}/pdf" target="_blank">{{ icone('pdf', 18) }} Ouvrir le PDF</a>
+        {% if f.statut == 'CONFIRMEE' %}<a href="/factures/{{ f.id }}/pdf?copie=1" target="_blank">{{ icone('pdf', 18) }} Imprimer une copie</a>{% endif %}
+        {% if f.dossier_id %}<a href="/dossiers/{{ f.dossier_id }}">{{ icone('facture', 18) }} Voir le dossier {{ f.dossier_id }}</a>{% endif %}
+        {% if origine %}<a href="/factures/{{ origine.id }}">{{ icone('facture', 18) }} Facture d'origine</a>{% endif %}
+      </div>
+    </details>
+    {% if peut_payer %}<a class="btn btn-contour-vert" href="#paiement">Enregistrer un paiement</a>
+    {% else %}<a class="btn btn-contour-vert" href="/factures/{{ f.id }}/pdf" target="_blank">Ouvrir le PDF</a>{% endif %}
   </div>
 </div>
 
-<ol class="etapes">
-  <li class="fait"><span class="n"><i class="ti ti-check"></i></span><span><strong>Lecture</strong></span></li>
-  <li class="fait"><span class="n"><i class="ti ti-check"></i></span><span><strong>Validation</strong></span></li>
-  <li class="{{ 'fait' if f.statut == 'CONFIRMEE' else ('encours' if f.statut in ('VALIDEE','EN_ATTENTE_DGI') else '') }}"><span class="n">{% if f.statut == 'CONFIRMEE' %}<i class="ti ti-check"></i>{% else %}3{% endif %}</span><span><strong>Émise</strong>{{ 'code DGI reçu' if f.statut == 'CONFIRMEE' else STATUTS[f.statut]|lower }}</span></li>
-  {% if f.type == 'FV' %}<li class="{{ 'fait' if f.statut == 'CONFIRMEE' and f.reste_a_payer <= 0 else ('encours' if f.statut == 'CONFIRMEE' else '') }}"><span class="n">{% if f.statut == 'CONFIRMEE' and f.reste_a_payer <= 0 %}<i class="ti ti-check"></i>{% else %}4{% endif %}</span><span><strong>Payée</strong>{{ 'soldée' if f.reste_a_payer <= 0 else 'reste ' ~ (f.reste_a_payer|fcfa) }}</span></li>{% endif %}
-</ol>
-
-<div class="row g-3">
-  <div class="col-lg-8">
-    <div class="card">
-      <div class="table-responsive">
-        <table class="table table-vcenter card-table">
-          <thead><tr><th>Désignation</th><th class="num">Quantité</th><th class="num">Prix {{ aide('TTC') }}</th><th class="num">Montant TTC</th><th>{{ aide('groupe', 'Groupe') }}</th></tr></thead>
-          <tbody>
-          {% for l in t.lignes %}
-          <tr><td>{{ l.designation }}</td><td class="num">{{ l.quantite|replace('.', ',') }}</td><td class="num">{{ l.prix_unitaire_ttc|fcfa }}</td><td class="num">{{ l.montant_ttc|fcfa }}</td><td>{{ l.groupe }}</td></tr>
-          {% endfor %}
-          </tbody>
-        </table>
-      </div>
-      <div class="card-body">
-        <div class="row">
-          <div class="col-md-6 small">
-            <p class="mb-1"><strong>Client</strong> : {{ c.client.nom }}</p>
-            <p class="mb-1">{{ aide('IFU') }} : {{ c.client.ifu or 'non communiqué' }}</p>
-            <p class="mb-1">Paiement : {{ PAIEMENTS.get(c.mode_paiement, c.mode_paiement) }}</p>
-            {% if c.motif %}<p class="mb-1">Motif : {{ c.motif }}</p>{% endif %}
-            {% if c.reference %}<p class="mb-1">Facture d'origine : <span class="mono">{{ c.reference.numero }}</span><br>Code DGI d'origine : <span class="mono">{{ c.reference.code_dgi }}</span></p>{% endif %}
-          </div>
-          <div class="col-md-6">
-            <table class="w-100 totaux">
-              <tr><td>Total HT</td><td class="num">{{ t.total_ht|fcfa }}</td></tr>
-              <tr><td>{{ aide('TVA') }} 18 %</td><td class="num">{{ t.total_tva|fcfa }}</td></tr>
-              <tr class="fort"><td>Total TTC</td><td class="num">{{ t.total_ttc|fcfa }}</td></tr>
-              {% if t.aib_taux %}<tr><td>{{ aide('AIB') }} {{ t.aib_taux }} %</td><td class="num">− {{ t.aib_montant|fcfa }}</td></tr>
-              <tr class="fort net"><td>Net à payer</td><td class="num">{{ t.net_a_payer|fcfa }}</td></tr>{% endif %}
-            </table>
-          </div>
+<div class="row g-4">
+  <!-- Document -->
+  <div class="col-xl-8">
+    <article class="doc">
+      <div class="doc-entete">
+        <div class="doc-logo">
+          {% if perso.logo %}<img src="{{ perso.logo }}" alt="Logo {{ v.raison_sociale }}">
+          {% else %}<span aria-hidden="true">{{ (v.raison_sociale or 'e')[:1] }}</span>{% endif %}
+        </div>
+        <div class="doc-vendeur">
+          <strong>{{ v.raison_sociale }}</strong>
+          {{ v.adresse }}<br>
+          {{ v.telephone }}{% if v.email %} | {{ v.email }}{% endif %}<br>
+          <span class="fort">{{ aide('IFU') }} : {{ v.ifu }}</span><br>
+          <span class="fort">RCCM : {{ v.rccm }}</span>
+        </div>
+        <div class="doc-montant">
+          <span class="pastille-numero mono">{{ f.numero }}</span>
+          <span class="lib">{% if t.aib_taux %}Net à payer{% else %}Montant total TTC{% endif %}</span>
+          <span class="val">{% if f.type == 'FA' %}− {% endif %}{{ t.net_a_payer|fcfa }}</span>
         </div>
       </div>
-    </div>
+
+      <div class="doc-cadre">
+        <div class="doc-infos">
+          <div class="doc-dates">
+            <div><span class="lib">Date de la facture</span><span class="val">{{ f.valide_le|date_fr }}</span></div>
+            <div><span class="lib">Émission DGI (simulée)</span><span class="val">{% if f.horodatage_dgi %}{{ f.horodatage_dgi|date_fr }}{% else %}{{ STATUTS[f.statut] }}{% endif %}</span></div>
+            <div><span class="lib">Mode de paiement</span><span class="val">{{ PAIEMENTS.get(c.mode_paiement, c.mode_paiement) }}</span></div>
+            {% if f.accuse_client_le %}<div><span class="lib">Reçue par le client</span><span class="val">{{ f.accuse_client_le|date_fr }}</span></div>{% endif %}
+          </div>
+          <div class="doc-client">
+            <span class="lib">Facturé à</span>
+            <p class="nom">{{ c.client.nom }}</p>
+            {% if c.client.adresse %}{{ c.client.adresse }}<br>{% endif %}
+            {% if c.client.telephone %}{{ c.client.telephone }}<br>{% endif %}
+            <span class="fort">{{ aide('IFU') }} : {{ c.client.ifu or 'non communiqué' }}</span><br>
+            {% if c.client.aib_taux %}<span class="fort">{{ aide('AIB') }} : {{ c.client.aib_taux }} %</span>{% endif %}
+            {% if c.motif or c.reference %}
+            <span class="lib mt-3">Note</span>
+            <p class="doc-note mb-0">
+              {% if c.motif %}Motif de l'avoir : {{ c.motif }}.{% endif %}
+              {% if c.reference %}<br>Facture d'origine <span class="mono">{{ c.reference.numero }}</span>, code DGI <span class="mono">{{ c.reference.code_dgi }}</span>.{% endif %}
+            </p>
+            {% endif %}
+          </div>
+        </div>
+
+        <div class="table-responsive">
+          <table class="doc-lignes table-responsive-empile">
+            <thead><tr><th>N°</th><th>Article</th><th class="centre">Quantité</th><th class="num">Prix unit. {{ aide('TTC') }}</th><th class="centre">{{ aide('groupe', 'Groupe') }}</th><th class="num">Montant TTC</th></tr></thead>
+            <tbody>
+            {% for l in t.lignes %}
+            <tr>
+              <td data-label="N°">{{ loop.index }}</td>
+              <td data-label="Article"><span class="fw-medium">{{ l.designation }}</span></td>
+              <td data-label="Quantité" class="centre">{{ l.quantite|replace('.', ',') }}</td>
+              <td data-label="Prix unitaire TTC" class="num">{{ l.prix_unitaire_ttc|fcfa }}</td>
+              <td data-label="Groupe" class="centre">{{ l.groupe }}</td>
+              <td data-label="Montant TTC" class="num fw-medium">{{ l.montant_ttc|fcfa }}</td>
+            </tr>
+            {% endfor %}
+            </tbody>
+          </table>
+        </div>
+
+        <div class="doc-totaux">
+          <div><span>Total HT</span><span>{{ t.total_ht|fcfa }}</span></div>
+          <div><span>{{ aide('TVA') }} 18 %</span><span>{{ t.total_tva|fcfa }}</span></div>
+          <div class="fort"><span>Total TTC</span><span>{{ t.total_ttc|fcfa }}</span></div>
+          {% if t.aib_taux %}
+          <div><span>{{ aide('AIB') }} {{ t.aib_taux }} %</span><span>− {{ t.aib_montant|fcfa }}</span></div>
+          <div class="fort net"><span>Net à payer</span><span>{{ t.net_a_payer|fcfa }}</span></div>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="doc-pied">
+        <span class="lib">Conditions</span>
+        {{ perso.conditions_paiement }}
+        <div class="verrou">{{ icone('cadenas', 18) }}<span>Document verrouillé : ni l'application ni la base de données n'acceptent de le modifier. Une correction passe par un {{ aide('avoir') }}.</span></div>
+      </div>
+    </article>
 
     {% if f.type == 'FV' and f.statut == 'CONFIRMEE' and u.role == 'responsable' and f.deja_avoir < f.total_ttc %}
-    <form method="post" action="/factures/{{ f.id }}/avoir" class="card mt-3">
-      <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="idem" value="{{ idem }}">
-      <div class="card-header"><h2 class="card-title">Créer un avoir</h2></div>
-      <div class="card-body">
+    <details class="card mt-4">
+      <summary class="card-header d-flex align-items-center gap-2" style="cursor:pointer;list-style:none">{{ icone('plus', 18) }}<h2 class="card-title m-0">Créer un avoir</h2></summary>
+      <form method="post" action="/factures/{{ f.id }}/avoir" class="card-body">
+        <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="idem" value="{{ idem }}">
+        <p class="small text-secondary">Indiquez les quantités à créditer (retour, produit abîmé, erreur). Pour annuler toute la facture, reprenez toutes les quantités.</p>
         <div class="table-responsive"><table class="table table-sm">
           {% for l in t.lignes %}
           <tr><td>{{ l.designation }}</td><td class="text-secondary small">facturé : {{ l.quantite|replace('.', ',') }}</td>
             <td style="width:7rem"><input class="form-control form-control-sm text-end" name="q:{{ loop.index0 }}" placeholder="0" inputmode="decimal" aria-label="Quantité à créditer"></td></tr>
           {% endfor %}
         </table></div>
-        <input class="form-control mb-2" name="motif" placeholder="Motif" required>
+        <input class="form-control mb-2" name="motif" placeholder="Motif (obligatoire)" required>
         <label class="form-check mb-2"><input class="form-check-input" type="checkbox" name="emettre" value="1" checked> <span class="form-check-label">Émettre l'avoir tout de suite</span></label>
-        <button class="btn btn-outline-primary" type="submit">Créer l'avoir</button>
+        <button class="btn btn-contour-vert" type="submit">Créer l'avoir</button>
         {% if f.deja_avoir %}<span class="small text-secondary ms-2">Déjà crédité : {{ f.deja_avoir|fcfa }}</span>{% endif %}
-      </div>
-    </form>
-    {% endif %}
-
-    {% if f.avoirs %}
-    <div class="card mt-3">
-      <div class="card-header"><h2 class="card-title">Avoirs liés</h2></div>
-      <table class="table card-table">
-        {% for a in f.avoirs %}<tr><td><a class="mono" href="/factures/{{ a.id }}">{{ a.numero }}</a></td><td>{{ a.contenu.motif }}</td><td><span class="etat etat-{{ a.statut }}">{{ STATUTS[a.statut] }}</span></td><td class="num">− {{ a.total_ttc|fcfa }}</td></tr>{% endfor %}
-      </table>
-    </div>
+      </form>
+    </details>
     {% endif %}
   </div>
 
-  <div class="col-lg-4">
-    <div class="card">
-      <div class="card-header"><h2 class="card-title">Émission (DGI simulée)</h2></div>
-      <div class="card-body">
-        {% if f.statut == 'VALIDEE' %}
-          {% if u.role == 'responsable' %}
-          <form method="post" action="/factures/{{ f.id }}/emettre">
-            <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="idem" value="{{ idem }}">
-            <button class="btn btn-primary w-100" type="submit">Émettre vers la DGI simulée</button>
-            <button class="btn btn-ghost-secondary btn-sm w-100 mt-2" type="submit" name="coupure" value="1">Simuler une coupure</button>
-          </form>
-          {% else %}<p class="small text-secondary mb-0">Réservé au responsable</p>{% endif %}
-        {% elif f.statut == 'EN_ATTENTE_DGI' %}
-          <p class="mb-0">En attente de confirmation</p>
-        {% elif f.statut == 'CONFIRMEE' %}
-          <div class="bloc-secu">
-            <p class="small text-secondary mb-1">Code DGI</p>
-            <p class="mono fw-bold mb-2">{{ f.code_dgi }}</p>
-            <p class="small mb-1">Compteurs : {{ f.compteurs }}</p>
-            <p class="small mb-0">Heure : {{ f.horodatage_dgi|date_fr }}</p>
-          </div>
-        {% elif f.statut == 'ANNULEE' %}
-          <p class="mb-0">Annulée : {{ f.motif_annulation }}</p>
-        {% endif %}
-      </div>
-    </div>
+  <!-- Colonne d'actions -->
+  <div class="col-xl-4 colonne-actions d-flex flex-column gap-4 order-first order-xl-last">
+    {% if f.statut == 'CONFIRMEE' and f.type == 'FV' and f.reste_a_payer <= 0 %}
+      <div class="statut-bandeau statut-vert">{{ icone('coche') }} Payée</div>
+    {% elif f.statut == 'CONFIRMEE' %}
+      <div class="statut-bandeau statut-vert">{{ icone('coche') }} Confirmée par la DGI (simulée)</div>
+    {% elif f.statut == 'ANNULEE' %}
+      <div class="statut-bandeau statut-rouge">{{ icone('alerte') }} Émission annulée</div>
+    {% else %}
+      <div class="statut-bandeau statut-ambre">{{ icone('horloge') }} {% if f.statut == 'VALIDEE' %}Validée · à émettre{% else %}{{ STATUTS[f.statut] }}{% endif %}</div>
+    {% endif %}
 
-    {% if f.type == 'FV' and f.statut == 'CONFIRMEE' %}
-    <div class="card mt-3">
-      <div class="card-header"><h2 class="card-title">Réception par le client</h2></div>
-      <div class="card-body">
-        {% if f.accuse_client_le %}
-          <p class="mb-0"><i class="ti ti-circle-check text-success"></i> Reçu le {{ f.accuse_client_le|date_fr }} · {{ CANAUX.get(f.accuse_client_canal, f.accuse_client_canal) }}</p>
-        {% elif u.role in ('vendeur', 'responsable') %}
-          <form method="post" action="/factures/{{ f.id }}/accuse" class="actions">
-            <input type="hidden" name="csrf" value="{{ csrf }}">
-            <select class="form-select form-select-sm" name="canal" style="max-width:10rem" aria-label="Canal">{% for k in ('WHATSAPP','SMS','EMAIL') %}<option value="{{ k }}">{{ CANAUX[k] }}</option>{% endfor %}</select>
-            <button class="btn btn-sm btn-outline-primary" type="submit">Enregistrer l'accusé</button>
-          </form>
-        {% else %}<p class="small text-secondary mb-0">—</p>{% endif %}
-      </div>
-    </div>
-
-    <div class="card mt-3">
-      <div class="card-header"><h2 class="card-title">Paiements (simulés)</h2></div>
-      <div class="card-body">
-        <p class="mb-2">Reste à payer : <strong>{{ f.reste_a_payer|fcfa }}</strong></p>
-        {% for p in f.paiements %}<p class="small mb-1">{{ p.enregistre_le|date_fr }} · {{ p.montant|fcfa }} · {{ PAIEMENTS.get(p.mode, p.mode) }} · reçu <span class="mono">{{ p.recu_numero }}</span></p>{% endfor %}
-        {% if f.reste_a_payer > 0 and u.role in ('responsable','comptable') %}
-        <form method="post" action="/factures/{{ f.id }}/paiement" class="mt-2">
+    <div class="card carte-action"><div class="card-body p-4">
+      {% if f.statut == 'VALIDEE' %}
+        <h2>{{ libelle }} pas encore émise !</h2>
+        {% if u.role == 'responsable' %}
+        <form method="post" action="/factures/{{ f.id }}/emettre">
           <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="idem" value="{{ idem }}">
-          <div class="row g-2">
-            <div class="col-6"><input class="form-control form-control-sm text-end" name="montant" value="{{ f.reste_a_payer }}" inputmode="numeric" aria-label="Montant"></div>
-            <div class="col-6"><select class="form-select form-select-sm" name="mode" aria-label="Mode">{% for k, v in PAIEMENTS.items() %}<option value="{{ k }}" {% if k == c.mode_paiement %}selected{% endif %}>{{ v }}</option>{% endfor %}</select></div>
-          </div>
-          <input class="form-control form-control-sm mt-2" name="reference" placeholder="Référence">
-          <button class="btn btn-sm btn-outline-primary mt-2" type="submit">Enregistrer et émettre le reçu</button>
+          <button class="btn btn-primary btn-large" type="submit">{{ icone('envoyer') }} Émettre vers la DGI simulée</button>
+          <button class="btn btn-ghost-secondary btn-sm w-100 mt-2" type="submit" name="coupure" value="1">Émettre avec coupure simulée (démo de reprise)</button>
         </form>
+        {% else %}<p class="small text-secondary mb-0">L'émission est réservée au responsable.</p>{% endif %}
+      {% elif f.statut == 'EN_ATTENTE_DGI' %}
+        <h2>Envoyée, en attente de confirmation</h2>
+        <p class="small text-secondary mb-0">Si l'application a été coupée, elle termine cette émission à son prochain démarrage, sans créer de doublon.</p>
+      {% elif f.statut == 'CONFIRMEE' %}
+        <h2>Émise et sécurisée</h2>
+        <div class="bloc-secu text-start">
+          <p class="small text-secondary mb-1">Code DGI (fictif)</p>
+          <p class="mono fw-bold mb-2" style="overflow-wrap:anywhere">{{ f.code_dgi }}</p>
+          <p class="small mb-1">Compteurs : {{ f.compteurs }}</p>
+          <p class="small mb-0">Heure : {{ f.horodatage_dgi|date_fr }}</p>
+        </div>
+        {% if f.type == 'FV' and not f.accuse_client_le and u.role in ('vendeur', 'responsable') %}
+        <form method="post" action="/factures/{{ f.id }}/accuse" class="actions justify-content-center mt-3">
+          <input type="hidden" name="csrf" value="{{ csrf }}">
+          <select class="form-select form-select-sm" name="canal" style="max-width:9rem" aria-label="Canal">{% for k in ('WHATSAPP','SMS','EMAIL') %}<option value="{{ k }}">{{ CANAUX[k] }}</option>{% endfor %}</select>
+          <button class="btn btn-sm btn-contour-vert" type="submit">Enregistrer l'accusé client</button>
+        </form>
+        {% elif f.accuse_client_le %}
+        <p class="small text-secondary mt-3 mb-0">Accusé reçu le {{ f.accuse_client_le|date_fr }} par {{ CANAUX.get(f.accuse_client_canal, f.accuse_client_canal) }} (simulé). Preuve conservée au journal.</p>
         {% endif %}
+      {% elif f.statut == 'ANNULEE' %}
+        <h2>Émission annulée</h2>
+        <p class="mb-0">{{ f.motif_annulation }}. Le numéro reste réservé et ne sera jamais réutilisé.</p>
+      {% endif %}
+    </div></div>
+
+    {% if f.type == 'FV' %}
+    <div class="card resume">
+      <div class="card-header"><h2 class="card-title">Résumé</h2></div>
+      <div class="ligne-total"><span>Total</span><span>{{ f.net_a_payer|fcfa }} {% if t.aib_taux %}net{% else %}TTC{% endif %}</span></div>
+      {% if f.paiements or f.avoirs %}
+      <ul class="frise">
+        {% for p in f.paiements %}
+        <li>
+          <div class="titre">Paiement · reçu <span class="mono">{{ p.recu_numero }}</span></div>
+          <div class="detail"><span>Date</span><span>{{ p.enregistre_le|date_fr }}</span></div>
+          <div class="detail"><span>Mode</span><span>{{ PAIEMENTS.get(p.mode, p.mode) }}</span></div>
+          <div class="detail"><span>Montant</span><span>{{ p.montant|fcfa }}</span></div>
+        </li>
+        {% endfor %}
+        {% for a in f.avoirs %}
+        <li class="avoir">
+          <div class="titre">Avoir <a class="mono" href="/factures/{{ a.id }}">{{ a.numero }}</a> <span class="etat etat-{{ a.statut }}">{{ STATUTS[a.statut] }}</span></div>
+          <div class="detail"><span>Motif</span><span>{{ a.contenu.motif }}</span></div>
+          <div class="detail"><span>Montant</span><span>− {{ a.net_a_payer|fcfa }}</span></div>
+        </li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <p class="text-secondary small px-4 pt-3 mb-2">Aucun paiement ni avoir pour l'instant.</p>
+      {% endif %}
+      <div class="reste">
+        <span>Reste à payer</span>
+        <span class="montant {% if f.reste_a_payer > 0 %}du{% else %}solde{% endif %}">{{ f.reste_a_payer|fcfa }}</span>
       </div>
+      {% if peut_payer %}
+      <form method="post" action="/factures/{{ f.id }}/paiement" class="card-body border-top" id="paiement">
+        <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="idem" value="{{ idem }}">
+        <p class="fw-semibold mb-2">Enregistrer un paiement (simulé)</p>
+        <div class="row g-2">
+          <div class="col-6"><input class="form-control form-control-sm text-end" name="montant" value="{{ f.reste_a_payer }}" inputmode="numeric" aria-label="Montant"></div>
+          <div class="col-6"><select class="form-select form-select-sm" name="mode" aria-label="Mode">{% for k, lib in PAIEMENTS.items() %}<option value="{{ k }}" {% if k == c.mode_paiement %}selected{% endif %}>{{ lib }}</option>{% endfor %}</select></div>
+        </div>
+        <input class="form-control form-control-sm mt-2" name="reference" placeholder="Référence fictive (ex. MM-TEST-0001)">
+        <button class="btn btn-primary w-100 mt-2" type="submit">Enregistrer et émettre le reçu</button>
+      </form>
+      {% endif %}
     </div>
     {% endif %}
   </div>

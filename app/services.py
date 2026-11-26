@@ -13,6 +13,7 @@ import csv
 import hashlib
 import io
 import json
+import re
 import os
 import secrets
 import uuid
@@ -49,6 +50,7 @@ PERSONNALISATION_DEFAUT = {
     "conditions_paiement": "Paiement à réception de facture.",
     "pied_de_page": "Merci de votre confiance.",
     "mode_arrondi": "groupe",
+    "taux_tva": "18",
 }
 
 
@@ -99,6 +101,10 @@ def articles(conn) -> list[dict]:
 def client(conn, cid: str | None) -> dict | None:
     r = conn.execute("SELECT * FROM clients WHERE id = ?", (cid,)).fetchone() if cid else None
     return dict(r, alias=json.loads(r["alias"])) if r else None
+
+
+def _taux_tva(conn) -> str:
+    return entreprise(conn)["personnalisation"].get("taux_tva") or "18"
 
 
 def entreprise(conn) -> dict:
@@ -207,7 +213,7 @@ def totaux_brouillon(conn, d: dict) -> dict | None:
     try:
         lignes = B.lignes_facturables(d["brouillon"], articles(conn))
         mode = entreprise(conn)["personnalisation"]["mode_arrondi"]
-        return calculer(lignes, _aib(conn, d), mode).en_dict() if lignes else None
+        return calculer(lignes, _aib(conn, d), mode, _taux_tva(conn)).en_dict() if lignes else None
     except (ErreurCalcul, ValueError, TypeError):
         return None
 
@@ -276,8 +282,21 @@ def _lire(extracteur: str, texte: str, cls: list[dict], arts: list[dict],
             return brut, nom, None
         lecteur = "les règles simples (sans IA)" if nom == "regles" else EXTRACTEURS[nom]
         motif = f"{' '.join(echecs)} Le message a été lu par {lecteur} : vérifiez chaque champ."
+        if nom == "regles" and quotas_epuises(motif):
+            motif = MARQUE_QUOTA + motif
         return brut, nom, motif
-    raise Refus(" ".join(echecs))
+    message = " ".join(echecs)
+    raise Refus((MARQUE_QUOTA + message) if quotas_epuises(message) else message)
+
+
+MARQUE_QUOTA = "[quota] "
+_ECHEC_MODELE = re.compile(r"\([^()]*\) : ([^.;]*)")
+
+
+def quotas_epuises(message: str) -> bool:
+    """Vrai si tous les modèles d'IA essayés ont échoué pour quota gratuit atteint."""
+    motifs = _ECHEC_MODELE.findall(message or "")
+    return bool(motifs) and all(m.startswith("quota gratuit") for m in motifs)
 
 
 def _enregistrer_brouillon(conn, u: dict, did: int, version: int, br: dict, action: str, details: dict) -> None:
@@ -450,7 +469,7 @@ def valider(conn, u: dict, did: int, version: int, cle_idem: str | None = None) 
         ent = entreprise(conn)
         c = client(conn, d["brouillon"]["client"]["id"])
         lignes = B.lignes_facturables(d["brouillon"], articles(conn))
-        t = calculer(lignes, int(c["aib_taux"]), ent["personnalisation"]["mode_arrondi"])
+        t = calculer(lignes, int(c["aib_taux"]), ent["personnalisation"]["mode_arrondi"], _taux_tva(conn))
         numero = prochain_numero(conn, "FV")
         contenu = {
             "type": "FV", "numero": numero, "date": maintenant(),
@@ -461,6 +480,8 @@ def valider(conn, u: dict, did: int, version: int, cle_idem: str | None = None) 
             "dossier_id": did,
             "decisions": d["brouillon"].get("decisions", {}),
             "mode_arrondi": ent["personnalisation"]["mode_arrondi"],
+            "commande": {k: (d["brouillon"].get(k) or {}).get("valeur") for k in B.CHAMPS_COMMANDE},
+            "rectifie": d["brouillon"].get("rectifie"),
         }
         cur = conn.execute(
             "INSERT INTO factures (type, numero, dossier_id, contenu, total_ttc, net_a_payer, valide_par, valide_le,"
@@ -485,7 +506,8 @@ def _dgi_soumettre(conn, uid: str, f: dict) -> dict:
     contenu = json.loads(f["contenu"])
     lignes = [Ligne(l["designation"], lire_quantite(l["quantite"]), l["prix_unitaire_ttc"], l["groupe"])
               for l in contenu["totaux"]["lignes"]]
-    t = calculer(lignes, contenu["totaux"]["aib_taux"], contenu.get("mode_arrondi", "groupe")).en_dict()
+    t = calculer(lignes, contenu["totaux"]["aib_taux"], contenu.get("mode_arrondi", "groupe"),
+                 contenu["totaux"].get("taux_tva", "18")).en_dict()
     totaux = {k: t[k] for k in ("total_ttc", "total_ht", "total_tva", "aib_montant", "net_a_payer")}
     conn.execute("INSERT INTO dgi_simulee (uid, numero_facture, type, totaux, statut) VALUES (?,?,?,?, 'EN_ATTENTE')",
                  (uid, f["numero"], f["type"], json.dumps(totaux)))
@@ -602,7 +624,8 @@ def creer_avoir(conn, u: dict, fid: int, quantites: dict[int, str], motif: str, 
             lignes.append(Ligne(l["designation"], qd, l["prix_unitaire_ttc"], l["groupe"], l.get("article_id")))
         if not lignes:
             raise Refus("Choisissez au moins une ligne à créditer.")
-        t = calculer(lignes, contenu["totaux"]["aib_taux"], contenu.get("mode_arrondi", "groupe"))
+        t = calculer(lignes, contenu["totaux"]["aib_taux"], contenu.get("mode_arrondi", "groupe"),
+                     contenu["totaux"].get("taux_tva", "18"))
         deja = conn.execute("SELECT COALESCE(SUM(total_ttc), 0) FROM factures WHERE facture_origine_id = ?"
                             " AND statut != 'ANNULEE'", (fid,)).fetchone()[0]
         if deja + t.total_ttc > f["total_ttc"]:
@@ -624,6 +647,64 @@ def creer_avoir(conn, u: dict, fid: int, quantites: dict[int, str], motif: str, 
                      "total_ttc": t.total_ttc, "motif": motif.strip()})
         _memoriser(conn, cle_idem, f"avoir:{fid}", {"facture_id": aid})
         return aid
+
+
+def creer_rectificative(conn, u: dict, fid: int) -> int:
+    """Après un avoir : nouveau brouillon qui reprend la facture d'origine, à corriger puis valider.
+
+    La facture d'origine reste intacte ; le lien (numéro, code DGI) figure sur la nouvelle facture."""
+    exiger(u, "dossier.ecrire")
+    f = facture(conn, fid)
+    if f["type"] != "FV" or f["statut"] != "CONFIRMEE":
+        raise Refus("Une facture rectificative se prépare à partir d'une facture de vente confirmée.")
+    if not any(a["statut"] == "CONFIRMEE" for a in f["avoirs"]):
+        raise Refus("Émettez d'abord un avoir sur cette facture, puis préparez la facture rectificative.")
+    for r in conn.execute("SELECT id, brouillon FROM dossiers WHERE statut != 'SUPPRIME'"):
+        if (json.loads(r["brouillon"]).get("rectifie") or {}).get("facture_id") == fid:
+            return r["id"]
+    d = conn.execute("SELECT * FROM dossiers WHERE id = ?", (f["contenu"].get("dossier_id"),)).fetchone()
+    if not d:
+        raise Refus("Dossier d'origine introuvable.")
+    br = json.loads(d["brouillon"])
+    br.pop("repli_ia", None)
+    br["decisions"] = {}
+    br["rectifie"] = {"facture_id": fid, "numero": f["numero"], "code_dgi": f["code_dgi"],
+                      "avoirs": [a["numero"] for a in f["avoirs"] if a["statut"] == "CONFIRMEE"]}
+    with transaction(conn):
+        cur = conn.execute(
+            "INSERT INTO dossiers (canal, texte_commande, texte_livraison, piece_jointe, cree_par, cree_le, extracteur,"
+            " extraction, brouillon) VALUES (?,?,?,?,?,?,?,?,?)",
+            (d["canal"], d["texte_commande"], d["texte_livraison"], None, u["id"], maintenant(), d["extracteur"],
+             d["extraction"], json.dumps(br, ensure_ascii=False)))
+        did = cur.lastrowid
+        journaliser(conn, u["id"], "RECTIFICATIVE_PREPAREE", f"dossier:{did}",
+                    {"facture_origine": f["numero"], "code_dgi_origine": f["code_dgi"]})
+    return did
+
+
+CANAUX_ENVOI = {"WHATSAPP": "WhatsApp", "SMS": "SMS", "EMAIL": "e-mail"}
+
+
+def envoyer_facture(conn, u: dict, fid: int, canal: str, destinataire: str) -> None:
+    """Envoi de la facture au client, simulé : rien ne part, l'envoi est inscrit au journal."""
+    exiger(u, "dossier.ecrire")
+    if canal not in CANAUX_ENVOI:
+        raise Refus("Canal d'envoi inconnu.")
+    destinataire = (destinataire or "").strip()[:80]
+    if len(destinataire) < 3:
+        raise Refus("Indiquez le numéro ou l'adresse du client.")
+    f = facture(conn, fid)
+    if f["statut"] != "CONFIRMEE":
+        raise Refus("La facture s'envoie une fois confirmée par la DGI.")
+    with transaction(conn):
+        journaliser(conn, u["id"], "FACTURE_ENVOYEE", f"facture:{fid}",
+                    {"numero": f["numero"], "canal": canal, "destinataire": destinataire, "simule": True})
+
+
+def envois(conn, fid: int) -> list[dict]:
+    return [dict(r, details=json.loads(r["details"])) for r in conn.execute(
+        "SELECT horodatage, acteur, details FROM journal WHERE action = 'FACTURE_ENVOYEE' AND objet = ? ORDER BY id",
+        (f"facture:{fid}",))]
 
 
 def accuser_reception(conn, u: dict, fid: int, canal: str) -> None:

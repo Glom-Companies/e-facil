@@ -102,6 +102,10 @@ def trouver_article(designation: str | None, articles: list[dict]) -> tuple[str 
 
 # --- Construction du brouillon ----------------------------------------------------------
 
+CHAMPS_COMMANDE = {"reference_commande": "référence de commande", "date_livraison": "livraison souhaitée",
+                   "conditions_paiement": "conditions de paiement"}
+
+
 def construire(extraction: dict, texte: str, clients: list[dict], articles: list[dict], verifier: bool = True) -> dict:
     rejets: list = []
     client = _verifier(extraction["client"], texte, rejets, "client", verifier)
@@ -113,6 +117,11 @@ def construire(extraction: dict, texte: str, clients: list[dict], articles: list
         rejets.append({"champ": "remise", "valeur": remise.get("valeur"), "citation": remise.get("citation"),
                        "raison": "citation absente de la source"})
         remise = None
+
+    infos = {}
+    for champ, libelle in CHAMPS_COMMANDE.items():
+        v = _verifier(extraction.get(champ) or {"valeur": None, "citation": None}, texte, rejets, libelle, verifier)
+        infos[champ] = {"valeur": v["valeur"], "citation": v["citation"]}
 
     lignes = []
     for i, l in enumerate(extraction["lignes"], start=1):
@@ -146,6 +155,7 @@ def construire(extraction: dict, texte: str, clients: list[dict], articles: list
         "mode_paiement": {"valeur": paiement["valeur"], "citation": paiement["citation"]},
         "total_cite": {"valeur": total["valeur"], "citation": total["citation"]},
         "remise_demandee": remise,
+        **infos,
         "instructions_suspectes": extraction.get("instructions_suspectes") or [],
         "rejets": rejets,
         "decisions": {},
@@ -183,11 +193,21 @@ def prix_retenu(ligne: dict, decisions: dict) -> int | None:
 def lignes_facturables(brouillon: dict, articles: list[dict], quantites: str = "facturees") -> list[Ligne]:
     """quantites : « facturees » (livrées si un bon de livraison existe) ou « commandees »."""
     index = {a["id"]: a for a in articles}
+    return [x for _, x in _lignes_avec_cle(brouillon, index, _taux_remise(brouillon, index, quantites), quantites)]
+
+
+def _taux_remise(brouillon: dict, index: dict, quantites: str = "facturees") -> Decimal:
+    """Remise accordée par le responsable, en pourcentage. Une remise en montant (« 2 000 F ») est
+    convertie en pourcentage du total TTC avant remise, puis appliquée aux prix unitaires."""
     remise = brouillon.get("remise_demandee")
     d_remise = brouillon.get("decisions", {}).get("REMISE_A_VALIDER")
-    taux_remise = Decimal(str(remise["valeur"])) if (remise and d_remise and d_remise.get("acceptee")
-                                                      and remise.get("type") == "POURCENTAGE") else Decimal(0)
-    return [x for _, x in _lignes_avec_cle(brouillon, index, taux_remise, quantites)]
+    if not (remise and d_remise and d_remise.get("acceptee")):
+        return Decimal(0)
+    valeur = Decimal(str(remise.get("valeur") or 0))
+    if remise.get("type") == "MONTANT":
+        brut = sum(l.montant_ttc for _, l in _lignes_avec_cle(brouillon, index, Decimal(0), quantites))
+        return valeur * 100 / brut if brut > 0 else Decimal(0)
+    return valeur
 
 
 def _lignes_avec_cle(brouillon: dict, index: dict, taux_remise: Decimal, quantites: str):
@@ -210,10 +230,7 @@ def _lignes_avec_cle(brouillon: dict, index: dict, taux_remise: Decimal, quantit
 def montants_par_ligne(brouillon: dict, articles: list[dict]) -> dict:
     """Montant TTC de chaque ligne du brouillon, par clé (deux lignes du même article restent distinctes)."""
     index = {a["id"]: a for a in articles}
-    remise = brouillon.get("remise_demandee")
-    d_remise = brouillon.get("decisions", {}).get("REMISE_A_VALIDER")
-    taux_remise = Decimal(str(remise["valeur"])) if (remise and d_remise and d_remise.get("acceptee")
-                                                      and remise.get("type") == "POURCENTAGE") else Decimal(0)
+    taux_remise = _taux_remise(brouillon, index)
     return {cle: ligne.montant_ttc for cle, ligne in _lignes_avec_cle(brouillon, index, taux_remise, "facturees")}
 
 

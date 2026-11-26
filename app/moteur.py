@@ -73,6 +73,7 @@ class Totaux:
     aib_taux: int = 0
     aib_montant: int = 0
     net_a_payer: int = 0
+    taux_tva: str = "18"
 
     def en_dict(self) -> dict:
         return {
@@ -84,20 +85,33 @@ class Totaux:
             "aib_taux": self.aib_taux,
             "aib_montant": self.aib_montant,
             "net_a_payer": self.net_a_payer,
+            "taux_tva": self.taux_tva,
         }
 
 
-def ventiler(ttc: int, groupe: str) -> tuple[int, int]:
+def lire_taux_tva(valeur) -> Decimal:
+    """Taux de TVA réglable (paramètres) : entre 0 et 50 %, au plus 2 décimales."""
+    try:
+        t = Decimal(str(valeur if valeur is not None else TAUX_TVA).strip().replace(",", "."))
+    except InvalidOperation:
+        raise ErreurCalcul(f"Taux de TVA illisible : {valeur!r}")
+    if not t.is_finite() or t < 0 or t > 50 or t != t.quantize(Decimal("0.01")):
+        raise ErreurCalcul("Le taux de TVA doit être compris entre 0 et 50 %, avec au plus 2 décimales.")
+    return Decimal(format(t.normalize(), "f"))
+
+
+def ventiler(ttc: int, groupe: str, taux_tva=TAUX_TVA) -> tuple[int, int]:
     """Renvoie (HT, TVA) pour un montant TTC d'un groupe donné."""
     if groupe in GROUPES_TVA_18:
-        ht = arrondi_franc(Decimal(ttc) * 100 / (100 + TAUX_TVA))
+        ht = arrondi_franc(Decimal(ttc) * 100 / (100 + lire_taux_tva(taux_tva)))
         return ht, ttc - ht
     if groupe in GROUPES_SANS_TVA:
         return ttc, 0
     raise ErreurCalcul(f"Groupe de taxe non pris en charge : {groupe!r}")
 
 
-def calculer(lignes: list[Ligne], aib_taux: int = 0, mode_arrondi: str = "groupe") -> Totaux:
+def calculer(lignes: list[Ligne], aib_taux: int = 0, mode_arrondi: str = "groupe", taux_tva=TAUX_TVA) -> Totaux:
+    taux_tva = lire_taux_tva(taux_tva)
     if not lignes:
         raise ErreurCalcul("Une facture doit contenir au moins une ligne.")
     if aib_taux not in TAUX_AIB_AUTORISES:
@@ -124,7 +138,7 @@ def calculer(lignes: list[Ligne], aib_taux: int = 0, mode_arrondi: str = "groupe
         total = par_groupe.setdefault(ligne.groupe, TotalGroupe())
         total.ttc += montant
         if mode_arrondi == "ligne":
-            ht, tva = ventiler(montant, ligne.groupe)
+            ht, tva = ventiler(montant, ligne.groupe, taux_tva)
             total.ht += ht
             total.tva += tva
 
@@ -133,13 +147,14 @@ def calculer(lignes: list[Ligne], aib_taux: int = 0, mode_arrondi: str = "groupe
 
     if mode_arrondi == "groupe":
         for groupe, total in par_groupe.items():
-            total.ht, total.tva = ventiler(total.ttc, groupe)
+            total.ht, total.tva = ventiler(total.ttc, groupe, taux_tva)
 
     t = Totaux(lignes=detail, par_groupe=par_groupe)
     t.total_ttc = sum(g.ttc for g in par_groupe.values())
     t.total_ht = sum(g.ht for g in par_groupe.values())
     t.total_tva = sum(g.tva for g in par_groupe.values())
     t.aib_taux = aib_taux
+    t.taux_tva = format(taux_tva, "f")
     t.aib_montant = arrondi_franc(Decimal(t.total_ht) * aib_taux / 100)
     t.net_a_payer = t.total_ttc - t.aib_montant
     return t

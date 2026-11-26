@@ -30,7 +30,12 @@
   {% if facture_id %}<a class="btn btn-primary" href="/factures/{{ facture_id }}">Voir la facture</a>{% endif %}
 </div>
 {% if br.repli_ia %}
-<div class="alert alert-warning" role="alert"><strong>L'IA n'a pas pu lire ce message.</strong> {{ br.repli_ia }}</div>
+{% set quota = br.repli_ia.startswith('[quota] ') %}
+<div class="alert alert-warning" role="alert"><strong>{% if quota %}Quota gratuit de l'IA épuisé.{% else %}L'IA n'a pas pu lire ce message.{% endif %}</strong> {{ br.repli_ia.replace('[quota] ', '') }}</div>
+{% if quota %}{% with repli_regles=True, cle_quota=d.id %}{% include "_quota.html" %}{% endwith %}{% endif %}
+{% endif %}
+{% if br.rectifie %}
+<div class="alert alert-info" role="status"><strong>Facture rectificative</strong> de la facture <a href="/factures/{{ br.rectifie.facture_id }}">{{ br.rectifie.numero }}</a>{% if br.rectifie.avoirs %}, annulée par l'avoir {{ br.rectifie.avoirs|join(', ') }}{% endif %}. Corrigez le brouillon, puis validez.</div>
 {% endif %}
 
 <div class="grille-revue">
@@ -75,6 +80,9 @@
             </div>
             <div><span class="lib">Reçu le</span><span class="val">{{ d.cree_le|date_fr }}</span></div>
             <div><span class="lib">Canal</span><span class="val">{{ CANAUX.get(d.canal, d.canal) }}</span></div>
+            {% for cle, lib in [('reference_commande', 'Réf. commande'), ('date_livraison', 'Livraison souhaitée'), ('conditions_paiement', 'Conditions de paiement')] if (br[cle] or {}).valeur %}
+            <div><span class="lib">{{ lib }}</span><span class="val">{{ br[cle].valeur }}</span><span class="champ-cite">Lu : « {{ br[cle].citation }} »</span></div>
+            {% endfor %}
           </div>
           <div class="doc-client">
             <label class="lib" for="client_id">Facturé à
@@ -138,7 +146,7 @@
           <div><span>{{ aide('groupe', 'Groupe ' ~ g) }}</span><span>{{ t.ttc|fcfa }}</span></div>
           {% endfor %}
           <div><span>Total HT</span><span>{{ d.totaux.total_ht|fcfa }}</span></div>
-          <div><span>Dont {{ aide('TVA') }} 18 %</span><span>{{ d.totaux.total_tva|fcfa }}</span></div>
+          <div><span>Dont {{ aide('TVA') }} {{ d.totaux.taux_tva or 18 }} %</span><span>{{ d.totaux.total_tva|fcfa }}</span></div>
           <div class="fort"><span>Total {{ aide('TTC') }}</span><span>{{ d.totaux.total_ttc|fcfa }}</span></div>
           {% if d.totaux.aib_taux %}
           <div><span>Retenue {{ aide('AIB') }} {{ d.totaux.aib_taux }} %</span><span>− {{ d.totaux.aib_montant|fcfa }}</span></div>

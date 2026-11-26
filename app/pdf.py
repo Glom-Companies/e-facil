@@ -98,6 +98,10 @@ def generer(contenu: dict, securite: dict | None = None, copie: bool = False) ->
     c.setFont("Helvetica", 9)
     c.drawRightString(larg - marge, y - 9 * mm, f"N° {contenu['numero']}")
     c.drawRightString(larg - marge, y - 13 * mm, f"Date : {_date(contenu['date'])}")
+    if contenu.get("rectifie"):
+        c.drawRightString(larg - marge, y - 17 * mm, f"Rectifie la facture : {contenu['rectifie']['numero']}")
+        c.setFont("Helvetica", 7.5)
+        c.drawRightString(larg - marge, y - 21 * mm, f"Code DGI d'origine : {contenu['rectifie']['code_dgi']}")
     if type_doc == "FA" and contenu.get("reference"):
         c.drawRightString(larg - marge, y - 17 * mm, f"Facture d'origine : {contenu['reference']['numero']}")
         c.setFont("Helvetica", 7.5)
@@ -157,7 +161,7 @@ def generer(contenu: dict, securite: dict | None = None, copie: bool = False) ->
     c.setFont("Helvetica", 8.5)
     for g, t in totaux["par_groupe"].items():
         y -= 4.5 * mm
-        c.drawString(marge, y, GROUPES.get(g, g))
+        c.drawString(marge, y, GROUPES.get(g, g).replace("18 %", f"{totaux.get('taux_tva', '18')} %"))
         c.drawRightString(marge + 95 * mm, y, _f(t["ttc"]))
         c.drawRightString(marge + 125 * mm, y, _f(t["ht"]))
         c.drawRightString(marge + 152 * mm, y, _f(t["tva"]))
@@ -172,7 +176,7 @@ def generer(contenu: dict, securite: dict | None = None, copie: bool = False) ->
         c.drawRightString(xd, y, valeur)
         y -= 5 * mm
     total("Total HT", _f(totaux["total_ht"]))
-    total("TVA 18 %", _f(totaux["total_tva"]))
+    total(f"TVA {totaux.get('taux_tva', '18')} %", _f(totaux["total_tva"]))
     total("Total TTC", _f(totaux["total_ttc"]), gras=True)
     if totaux.get("aib_taux"):
         total(f"AIB {totaux['aib_taux']} % (retenue)", "- " + _f(totaux["aib_montant"]))
@@ -180,9 +184,16 @@ def generer(contenu: dict, securite: dict | None = None, copie: bool = False) ->
         total("Net à payer", _f(totaux["net_a_payer"]), gras=True)
         c.setFillColor(colors.black)
     c.setFont("Helvetica", 8.5)
-    c.drawString(marge, y + 15 * mm, f"Mode de paiement : {LIBELLES_PAIEMENT.get(contenu.get('mode_paiement'), 'Espèces')}")
+    mentions = [f"Mode de paiement : {LIBELLES_PAIEMENT.get(contenu.get('mode_paiement'), 'Espèces')}"]
     if contenu.get("motif"):
-        c.drawString(marge, y + 10 * mm, f"Motif de l'avoir : {contenu['motif'][:80]}")
+        mentions.append(f"Motif de l'avoir : {contenu['motif'][:80]}")
+    commande = contenu.get("commande") or {}
+    for cle, lib in (("reference_commande", "Réf. commande"), ("date_livraison", "Livraison souhaitée"),
+                     ("conditions_paiement", "Conditions de paiement")):
+        if commande.get(cle):
+            mentions.append(f"{lib} : {str(commande[cle])[:60]}")
+    for i, texte in enumerate(mentions[:4]):
+        c.drawString(marge, y + (15 - 4 * i) * mm, texte)
 
     # Bloc de sécurité (fictif)
     y -= 6 * mm

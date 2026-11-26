@@ -64,6 +64,12 @@ class ResultatExtraction(BaseModel):
     mode_paiement: PaiementCite
     total_cite: EntierCite
     remise_demandee: Optional[Remise] = None
+    reference_commande: Optional[TexteCite] = Field(
+        None, description="Numéro du bon de commande ou référence écrite (ex. « BC-2026-114 »), sinon null.")
+    date_livraison: Optional[TexteCite] = Field(
+        None, description="Date ou délai de livraison demandé, recopié tel quel (« demain matin », « avant le 30/11 »), sinon null.")
+    conditions_paiement: Optional[TexteCite] = Field(
+        None, description="Conditions de paiement écrites (« à 30 jours », « à la livraison », « fin du mois »), sinon null.")
     instructions_suspectes: list[str]
 
 
@@ -135,6 +141,18 @@ MOTS_PAIEMENT = [
     (r"cr[eé]dit|fin du mois|plus tard", "CREDIT"),
 ]
 MOTIF_TOTAL = re.compile(r"total\s*(?:[:=]|de|fait|=)?\s*((?:\d{1,3}(?:[.\s ]\d{3})+|\d+)\s*(?:f\b|fcfa|cfa)?)", re.IGNORECASE)
+MOTIF_REMISE_MONTANT = re.compile(
+    r"((?:remise|r[eé]duction|rabais|ristourne)\D{0,20}?(\d[\d .]*\d|\d)\s*(?:f\b|fcfa|francs?\b))", re.IGNORECASE)
+MOTIFS_COMMANDE = {
+    "reference_commande": re.compile(r"\b((?:BC|CMD|PO)[- ]?\d[\w-]*|(?:bon de )?commande\s*(?:n[°o]\.?|num[ée]ro)\s*[\w-]*\d[\w-]*)",
+                                     re.IGNORECASE),
+    "date_livraison": re.compile(r"((?:livr\w*|avant|pour)\s+(?:le\s+|d'ici\s+)?(?:\d{1,2}[/.-]\d{1,2}(?:[/.-]\d{2,4})?|"
+                                 r"demain(?:\s+matin|\s+soir)?|apr[eè]s-demain|lundi|mardi|mercredi|jeudi|vendredi|samedi|"
+                                 r"dimanche|cette semaine|la semaine prochaine))", re.IGNORECASE),
+    "conditions_paiement": re.compile(r"((?:paiement|r[eè]glement|je (?:te )?paie|payer?)\s+(?:[àa]|sous|dans)\s+"
+                                      r"(?:\d+\s*jours(?:\s+fin de mois)?|la livraison|r[eé]ception|la fin du mois|fin du mois)|"
+                                      r"[àa] cr[eé]dit)", re.IGNORECASE),
+}
 MOTIF_REMISE = re.compile(r"((?:remise|r[eé]duction|rabais|ristourne)\D{0,20}?(\d+(?:[.,]\d+)?)\s*%)", re.IGNORECASE)
 MOTIF_SUSPECT = re.compile(
     r"([^.\n]*(?:ignore[rz]? (?:les|la|tes)|oublie[rz]? (?:les|tes)|instruction|syst[eè]me|\bIA\b|intelligence artificielle"
@@ -199,6 +217,15 @@ def extraire_regles(texte: str, clients: list[dict], articles: list[dict]) -> di
     if m:
         res["remise_demandee"] = {"type": "POURCENTAGE", "valeur": float(m.group(2).replace(",", ".")),
                                   "citation": m.group(1)}
+    else:
+        m = MOTIF_REMISE_MONTANT.search(texte)
+        if m and lire_montant(m.group(2)):
+            res["remise_demandee"] = {"type": "MONTANT", "valeur": float(lire_montant(m.group(2))),
+                                      "citation": m.group(1)}
+    for champ, motif in MOTIFS_COMMANDE.items():
+        m = motif.search(texte)
+        if m:
+            res[champ] = {"valeur": m.group(1).strip(), "citation": m.group(1).strip()}
     res["instructions_suspectes"] = [s.strip() for s in MOTIF_SUSPECT.findall(texte)]
     return res
 
@@ -462,6 +489,9 @@ def normaliser_resultat(brut: dict) -> dict:
         "mode_paiement": vc(brut.get("mode_paiement")),
         "total_cite": vc(brut.get("total_cite")),
         "remise_demandee": brut.get("remise_demandee") or None,
+        "reference_commande": vc(brut.get("reference_commande")),
+        "date_livraison": vc(brut.get("date_livraison")),
+        "conditions_paiement": vc(brut.get("conditions_paiement")),
         "instructions_suspectes": [s for s in (brut.get("instructions_suspectes") or []) if s],
         "modele": brut.get("modele"),
     }

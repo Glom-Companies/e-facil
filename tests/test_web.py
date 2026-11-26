@@ -128,3 +128,40 @@ def test_connexion_compte_demo_en_un_clic(client):
     page = client.get("/connexion").text
     r = client.post("/connexion", data={"csrf": csrf(page), "login": "rodrigue"})
     assert "Se déconnecter" not in r.text  # sans le clic de démonstration, le mot de passe reste exigé
+
+
+def test_socle_commande_remise_envoi_rectificative(client):
+    connecter(client, "admin")
+    page = client.get("/parametres").text
+    client.post("/parametres", data={"csrf": csrf(page), "couleur": "#1f9184", "conditions_paiement": "",
+                                     "pied_de_page": "", "mode_arrondi": "groupe", "taux_tva": "18"})
+    connecter(client, "rodrigue")
+    page = client.get("/dossiers/nouveau").text
+    r = client.post("/dossiers/nouveau", data={
+        "csrf": csrf(page), "canal": "WHATSAPP", "extracteur": "regles",
+        "texte_commande": "Bjr, c Dossou. Commande BC-2026-200 : 10 cartons de savon, livrer avant le 30/11. "
+                          "Paiement à 30 jours. Fais moi une remise de 2.000 F"})
+    assert "BC-2026-200" in r.text and "Paiement à 30 jours" in r.text
+    did = re.search(r"/dossiers/(\d+)/corriger", r.text).group(1)
+    page = client.post(f"/dossiers/{did}/decider", data={"csrf": csrf(r.text), "version": champ(r.text, "version"),
+                                                         "cle": "REMISE_A_VALIDER", "choix": "accepter"}).text
+    r = client.post(f"/dossiers/{did}/valider", data={"csrf": csrf(page), "version": champ(page, "version"),
+                                                      "idem": champ(page, "idem")})
+    fid = re.search(r"/factures/(\d+)/emettre", r.text).group(1)
+    r = client.post(f"/factures/{fid}/emettre", data={"csrf": csrf(r.text), "idem": champ(r.text, "idem")})
+    from app import services as S
+    c = db.connecter()
+    f = S.facture(c, int(fid))
+    brut = 10 * next(a["prix_unitaire_ttc"] for a in S.articles(c) if a["id"] == "A-011")
+    assert abs((brut - f["total_ttc"]) - 2000) <= 10  # remise en montant, arrondie au franc par unité
+    assert f["contenu"]["commande"]["reference_commande"] == "BC-2026-200"
+
+    r = client.post(f"/factures/{fid}/envoyer", data={"csrf": csrf(r.text), "canal": "WHATSAPP",
+                                                      "destinataire": "+229 01 00 00 01 17"})
+    assert "Envoyée le" in r.text
+    r = client.post(f"/factures/{fid}/avoir", data={"csrf": csrf(r.text), "idem": champ(r.text, "idem"),
+                                                    "q:0": "10", "motif": "Erreur de prix", "emettre": "1"})
+    r = client.get(f"/factures/{fid}")
+    r = client.post(f"/factures/{fid}/rectifier", data={"csrf": csrf(r.text)})
+    assert "Facture rectificative" in r.text and f["numero"] in r.text
+    assert client.get(f"/factures/{fid}/pdf").status_code == 200

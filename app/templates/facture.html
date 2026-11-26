@@ -63,6 +63,9 @@
             <div><span class="lib">Date de la facture</span><span class="val">{{ f.valide_le|date_fr }}</span></div>
             <div><span class="lib">Émission DGI (simulée)</span><span class="val">{% if f.horodatage_dgi %}{{ f.horodatage_dgi|date_fr }}{% else %}{{ STATUTS[f.statut] }}{% endif %}</span></div>
             <div><span class="lib">Mode de paiement</span><span class="val">{{ PAIEMENTS.get(c.mode_paiement, c.mode_paiement) }}</span></div>
+            {% for cle, lib in [('reference_commande', 'Réf. commande'), ('date_livraison', 'Livraison souhaitée'), ('conditions_paiement', 'Conditions de paiement')] if (c.commande or {})[cle] %}
+            <div><span class="lib">{{ lib }}</span><span class="val">{{ c.commande[cle] }}</span></div>
+            {% endfor %}
             {% if f.accuse_client_le %}<div><span class="lib">Reçue par le client</span><span class="val">{{ f.accuse_client_le|date_fr }}</span></div>{% endif %}
           </div>
           <div class="doc-client">
@@ -72,6 +75,7 @@
             {% if c.client.telephone %}{{ c.client.telephone }}<br>{% endif %}
             <span class="fort">{{ aide('IFU') }} : {{ c.client.ifu or 'non communiqué' }}</span><br>
             {% if c.client.aib_taux %}<span class="fort">{{ aide('AIB') }} : {{ c.client.aib_taux }} %</span>{% endif %}
+            {% if c.rectifie %}<p class="small mt-2 mb-0">Facture rectificative de la facture <a class="mono" href="/factures/{{ c.rectifie.facture_id }}">{{ c.rectifie.numero }}</a>, code DGI <span class="mono">{{ c.rectifie.code_dgi }}</span>{% if c.rectifie.avoirs %}, annulée par l'avoir <span class="mono">{{ c.rectifie.avoirs|join(', ') }}</span>{% endif %}.</p>{% endif %}
             {% if c.motif or c.reference %}
             <span class="lib mt-3">Note</span>
             <p class="doc-note mb-0">
@@ -102,7 +106,7 @@
 
         <div class="doc-totaux">
           <div><span>Total HT</span><span>{{ t.total_ht|fcfa }}</span></div>
-          <div><span>{{ aide('TVA') }} 18 %</span><span>{{ t.total_tva|fcfa }}</span></div>
+          <div><span>{{ aide('TVA') }} {{ t.taux_tva or 18 }} %</span><span>{{ t.total_tva|fcfa }}</span></div>
           <div class="fort"><span>Total TTC</span><span>{{ t.total_ttc|fcfa }}</span></div>
           {% if t.aib_taux %}
           <div><span>{{ aide('AIB') }} {{ t.aib_taux }} %</span><span>− {{ t.aib_montant|fcfa }}</span></div>
@@ -180,6 +184,26 @@
         </form>
         {% elif f.accuse_client_le %}
         <p class="small text-secondary mt-3 mb-0">Accusé reçu le {{ f.accuse_client_le|date_fr }} par {{ CANAUX.get(f.accuse_client_canal, f.accuse_client_canal) }} (simulé). Preuve conservée au journal.</p>
+        {% endif %}
+        {% if u.role in ('vendeur', 'responsable') %}
+        <form method="post" action="/factures/{{ f.id }}/envoyer" class="envoi-client text-start mt-3">
+          <input type="hidden" name="csrf" value="{{ csrf }}">
+          <p class="fw-bold mb-2">Envoyer au client <span class="small text-secondary fw-normal">(simulé)</span></p>
+          <div class="d-flex gap-2 flex-wrap">
+            <select class="form-select form-select-sm" name="canal" style="max-width:8.5rem" aria-label="Canal d'envoi">{% for k, lib in canaux_envoi.items() %}<option value="{{ k }}">{{ lib }}</option>{% endfor %}</select>
+            <input class="form-control form-control-sm" style="flex:1;min-width:9rem" name="destinataire" value="{{ contact_client }}" placeholder="Numéro ou e-mail" aria-label="Destinataire">
+          </div>
+          <button class="btn btn-sm btn-primary w-100 mt-2" type="submit">{{ icone('envoyer', 16) }} Envoyer la facture</button>
+        </form>
+        {% endif %}
+        {% for e in envois %}
+        <p class="small text-secondary mt-2 mb-0 text-start">Envoyée le {{ e.horodatage|date_fr }} par {{ canaux_envoi.get(e.details.canal, e.details.canal) }} à {{ e.details.destinataire }}.</p>
+        {% endfor %}
+        {% if f.type == 'FV' and f.avoirs|selectattr('statut', 'equalto', 'CONFIRMEE')|list and u.role in ('vendeur', 'responsable') %}
+        <form method="post" action="/factures/{{ f.id }}/rectifier" class="mt-3">
+          <input type="hidden" name="csrf" value="{{ csrf }}">
+          <button class="btn btn-sm btn-contour-vert w-100" type="submit">Préparer la facture rectificative</button>
+        </form>
         {% endif %}
       {% elif f.statut == 'ANNULEE' %}
         <h2>Émission annulée</h2>

@@ -74,7 +74,8 @@
     </header>
     <main class="contenu">
       {% if flash %}<div class="alert alert-success" role="status">{{ flash }}</div>{% endif %}
-      {% if erreur %}<div class="alert alert-danger" role="alert">{{ erreur }}</div>{% endif %}
+      {% if erreur %}<div class="alert alert-danger" role="alert">{{ erreur|replace('[quota] ', '') }}</div>
+      {% if erreur.startswith('[quota] ') %}{% include "_quota.html" %}{% endif %}{% endif %}
       {% block contenu %}{% endblock %}
     </main>
     <footer class="pied"><strong>e-FACIL</strong> par l'équipe BillGenius · prototype BWAI'2026, cas 2 · Les factures produites n'ont aucune valeur fiscale.</footer>

@@ -20,7 +20,7 @@ from . import services as S
 from .brouillon import LIBELLES, montants_par_ligne
 from .db import ecrire_parametre, lire_parametre, transaction, verifier_journal, journaliser
 from .extraction import EXTRACTEURS, ia_disponibles
-from .moteur import format_fcfa
+from .moteur import ErreurCalcul, format_fcfa, lire_taux_tva
 from .pdf import LIBELLES_PAIEMENT, generer
 from .texte import localiser
 
@@ -444,7 +444,9 @@ async def facture(request: Request, fid: int):
     async def vue(request, c, u):
         f = S.facture(c, fid)
         origine = S.facture(c, f["facture_origine_id"]) if f.get("facture_origine_id") else None
-        return page(request, "facture.html", c, u, f=f, origine=origine)
+        cl = S.client(c, f["contenu"]["client"].get("id")) or {}
+        return page(request, "facture.html", c, u, f=f, origine=origine, envois=S.envois(c, fid),
+                    canaux_envoi=S.CANAUX_ENVOI, contact_client=cl.get("telephone") or cl.get("email") or "")
     return await avec_utilisateur(vue)(request)
 
 
@@ -483,6 +485,21 @@ async def avoir(request: Request, fid: int):
             S.emettre(c, u, aid)
         return aid
     return await action(request, lambda aid: f"/factures/{aid}", f"/factures/{fid}", f, "Avoir créé.")
+
+
+@app.post("/factures/{fid}/envoyer")
+async def envoyer(request: Request, fid: int):
+    async def f(c, u, form):
+        S.envoyer_facture(c, u, fid, form.get("canal", ""), form.get("destinataire", ""))
+    return await action(request, f"/factures/{fid}", f"/factures/{fid}", f, "Facture envoyée au client (simulé).")
+
+
+@app.post("/factures/{fid}/rectifier")
+async def rectifier(request: Request, fid: int):
+    async def f(c, u, form):
+        return S.creer_rectificative(c, u, fid)
+    return await action(request, lambda did: f"/dossiers/{did}", f"/factures/{fid}", f,
+                        "Brouillon de la facture rectificative : corrigez-le, puis validez.")
 
 
 @app.post("/factures/{fid}/accuse")
@@ -551,6 +568,8 @@ ACTIONS_JOURNAL = {
     "EMISSION_ANNULEE": ("a vu l'émission annulée par la DGI simulée", "ventes", "alerte"),
     "AVOIR_CREE": ("a créé un avoir", "ventes", "facture"),
     "COPIE_IMPRIMEE": ("a imprimé une copie", "ventes", "pdf"),
+    "FACTURE_ENVOYEE": ("a envoyé une facture au client (simulé)", "ventes", "envoyer"),
+    "RECTIFICATIVE_PREPAREE": ("a préparé une facture rectificative", "ventes", "brouillon"),
     "ACCUSE_CLIENT": ("a enregistré l'accusé de réception du client", "ventes", "coche"),
     "PAIEMENT_ENREGISTRE": ("a enregistré un paiement", "paiements", "argent"),
     "CLIENT_MODIFIE": ("a modifié une fiche client", "administration", "gestion"),
@@ -665,6 +684,10 @@ async def parametres_post(request: Request):
         couleur = form.get("couleur", "")
         if not (len(couleur) == 7 and couleur.startswith("#")):
             raise S.Refus("Couleur invalide.")
+        try:
+            perso["taux_tva"] = format(lire_taux_tva(form.get("taux_tva") or "18"), "f")
+        except ErreurCalcul as e:
+            raise S.Refus(str(e))
         perso.update(couleur=couleur, conditions_paiement=form.get("conditions_paiement", "")[:200],
                      pied_de_page=form.get("pied_de_page", "")[:200],
                      mode_arrondi="ligne" if form.get("mode_arrondi") == "ligne" else "groupe")

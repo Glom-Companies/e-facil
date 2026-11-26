@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Script de contrôle du jeu de données et du corpus de test (section 8 du brief).
+"""Script de contrôle du jeu de données et du corpus de test.
 
 Python 3.11+, bibliothèque standard uniquement.
 Utilisation :

@@ -2,8 +2,6 @@
 
 **e-FACIL** veut dire *e-Facturation Assistée, Contrôlée, Intègre et Lisible*. C'est le prototype de l'équipe **BillGenius** au hackathon **BWAI'2026, cas pratique 2 : automatisation de la facturation**.
 
-Organisation de l'équipe : voir [`equipe/`](equipe/00_PLAN.md).
-
 Une PME béninoise reçoit une commande par WhatsApp, SMS, e-mail ou photo. Le prototype :
 1. lit le message et propose un brouillon. Chaque champ affiche le passage du message dont il vient et un niveau de confiance ; une information absente reste vide ;
 2. contrôle le brouillon : client et articles connus, prix habituels, écart entre commande et livraison, doublon, total annoncé, remise, consigne suspecte ;
@@ -91,7 +89,7 @@ Les 36 tests couvrent :
 | S2 | IA Gemini avec vérification des citations et des référentiels (démo) |
 | S3 | IA locale (Ollama) avec vérifications |
 
-Le script compte les champs justes, les valeurs inventées, les champs laissés vides à tort et les anomalies détectées, avec des intervalles de confiance de Wilson. Les résultats sont écrits dans `eval/resultats_<corpus>.md`, et les réponses de l'IA sont mises en cache. Le format du corpus est décrit dans `data/corpus/exemple.jsonl`.
+Le script compte les champs justes, les valeurs inventées, les champs laissés vides à tort et les anomalies détectées, avec des intervalles de confiance de Wilson. Les résultats sont écrits dans `eval/resultats_<corpus>.md`, et les réponses de l'IA sont mises en cache. Le format du corpus est décrit dans [`data/corpus/README.md`](data/corpus/README.md).
 
 ## Architecture
 

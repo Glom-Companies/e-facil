@@ -83,9 +83,9 @@ Chaque message peut cumuler plusieurs situations ou anomalies. Tous les quotas m
 
 ---
 
-## 5. Remarques sur le schéma (section 10 du brief)
+## 5. Remarques sur le schéma
 
-Conformément à la consigne *« Ne crée pas de nouveaux codes d'anomalie ni de nouveaux noms de champs. S'il en manque un, signale-le dans `LISEZMOI.md` »*, aucun champ ni code supplémentaire n'a été introduit. Pour information :
+Aucun champ ni code d'anomalie n'a été ajouté au schéma. Pour information :
 - Le schéma de `attendu` (section 5) prévoit `total_ttc_cite` (entier ou `null`) et `quantite_livree` (chaîne ou `null`) sans champs `citation_total` ni `citation_quantite_livree` dédiés dans le corpus, tandis que l'extracteur du prototype (`app/extraction.py`) retourne un couple `{valeur, citation}` pour `total_cite` et pour les quantités du bon de livraison.
 - De même, les textes d'injection (`INSTRUCTION_SUSPECTE`) sont signalés via `anomalies_attendues` dans le corpus, sans champ `instructions_suspectes` additionnel dans `attendu`.
 

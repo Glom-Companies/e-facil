@@ -1,0 +1,16 @@
+{
+  "raison_sociale": "SÈNA DISTRIBUTION SARL",
+  "ifu": "9900000000001",
+  "rccm": "RB/COT/26 B 00000",
+  "adresse": "Lot 000, Akpakpa, Cotonou",
+  "telephone": "+229 01 00 00 00 00",
+  "email": "contact@sena-distribution.example",
+  "regime_fiscal": "REEL",
+  "nim_simule": "SIMU000001",
+  "utilisateurs": [
+    {"id": "U-01", "nom": "Aïcha", "role": "vendeur"},
+    {"id": "U-02", "nom": "Rodrigue", "role": "responsable"},
+    {"id": "U-03", "nom": "Mireille", "role": "comptable"},
+    {"id": "U-04", "nom": "Admin", "role": "admin"}
+  ]
+}

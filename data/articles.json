@@ -1,0 +1,16 @@
+[
+  {"id": "A-001", "designation": "Riz parfumé sac de 25 kg", "alias": ["riz 25kg", "riz 25 kg", "sac de riz", "sacs de riz", "riz parfumé", "sac riz", "sacs riz", "riz"], "unite": "sac", "prix_unitaire_ttc": 17500, "groupe_taxe": "B", "quantite_decimale": false},
+  {"id": "A-002", "designation": "Huile végétale bidon de 5 L", "alias": ["huile 5l", "huile 5 l", "bidon d'huile", "bidons d'huile", "bidon huile", "bidons huile", "huile"], "unite": "bidon", "prix_unitaire_ttc": 7500, "groupe_taxe": "B", "quantite_decimale": false},
+  {"id": "A-003", "designation": "Savon de ménage carton de 72", "alias": ["savon", "cartons savon", "carton savon", "cartons de savon", "carton de savon"], "unite": "carton", "prix_unitaire_ttc": 12000, "groupe_taxe": "B", "quantite_decimale": false},
+  {"id": "A-004", "designation": "Eau minérale pack de 12 × 1,5 L", "alias": ["eau minérale", "eau minerale", "pack d'eau", "packs d'eau", "packs eau", "pack eau"], "unite": "pack", "prix_unitaire_ttc": 3600, "groupe_taxe": "B", "quantite_decimale": false},
+  {"id": "A-005", "designation": "Sucre en morceaux carton de 20 × 1 kg", "alias": ["sucre", "carton sucre", "cartons de sucre", "cartons sucre"], "unite": "carton", "prix_unitaire_ttc": 19000, "groupe_taxe": "B", "quantite_decimale": false},
+  {"id": "A-006", "designation": "Lait concentré sucré carton de 48", "alias": ["lait concentré", "lait concentre", "lait", "cartons de lait", "carton lait"], "unite": "carton", "prix_unitaire_ttc": 26500, "groupe_taxe": "B", "quantite_decimale": false},
+  {"id": "A-007", "designation": "Farine de blé sac de 50 kg", "alias": ["farine", "sac de farine", "sacs de farine", "farine 50kg"], "unite": "sac", "prix_unitaire_ttc": 24000, "groupe_taxe": "A", "quantite_decimale": false, "a_verifier": true},
+  {"id": "A-008", "designation": "Maïs grain (au kilo)", "alias": ["maïs", "kg de maïs", "kg de mais"], "unite": "kg", "prix_unitaire_ttc": 300, "groupe_taxe": "A", "quantite_decimale": true, "a_verifier": true},
+  {"id": "A-009", "designation": "Jus de fruits pack de 6 × 1 L", "alias": ["jus", "pack de jus", "packs de jus", "jus de fruits"], "unite": "pack", "prix_unitaire_ttc": 6000, "groupe_taxe": "B", "quantite_decimale": false},
+  {"id": "A-010", "designation": "Pâtes alimentaires carton de 20 paquets", "alias": ["pâtes", "pates", "spaghetti", "carton de pâtes", "cartons de pates"], "unite": "carton", "prix_unitaire_ttc": 9500, "groupe_taxe": "B", "quantite_decimale": false},
+  {"id": "A-011", "designation": "Tomate concentrée carton de 50 boîtes", "alias": ["tomate", "tomate concentrée", "tomate concentree", "cartons de tomate"], "unite": "carton", "prix_unitaire_ttc": 15500, "groupe_taxe": "B", "quantite_decimale": false},
+  {"id": "A-012", "designation": "Gari (au kilo)", "alias": ["gari", "kg de gari"], "unite": "kg", "prix_unitaire_ttc": 450, "groupe_taxe": "B", "quantite_decimale": true},
+  {"id": "A-013", "designation": "Huile de palme (au litre)", "alias": ["huile rouge", "huile de palme", "litres d'huile rouge"], "unite": "litre", "prix_unitaire_ttc": 1100, "groupe_taxe": "B", "quantite_decimale": true},
+  {"id": "A-014", "designation": "Livraison Cotonou", "alias": ["livraison", "transport", "frais de livraison"], "unite": "forfait", "prix_unitaire_ttc": 5000, "groupe_taxe": "B", "quantite_decimale": false}
+]

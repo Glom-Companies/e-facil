@@ -41,20 +41,12 @@ TAILLE_MAX_MEDIA = 10 * 1024 * 1024
 DEBIT_MAX = 20  # messages par minute et par numéro
 _debits: dict[str, list[float]] = {}
 
-AIDE = ("e-FACIL · tout le parcours par message (12 = n° du dossier)\n"
-        "1. Commande : envoyez le message du client (texte, note vocale, photo ou PDF).\n"
-        "2. Livraison : BL 12 : 10 cartons de savon…\n"
-        "3. Vérifier : VOIR 12 · LISTE (brouillons en attente)\n"
-        "4. Corriger :\n"
-        "   CLIENT 12 Dossou · QTE 12 2 5 (ligne 2 = 5)\n"
-        "   AJOUTER 12 3 riz · RETIRER 12 2\n"
-        "5. Trancher (responsable) :\n"
-        "   LIVRE 12 (facturer le livré) · REMISE 12 OUI/NON\n"
-        "   PRIX 12 CATALOGUE · PRIX 12 CITE raison · TOTAL 12 · DOUBLON 12 NON\n"
-        "6. VALIDER 12 → valide et émet la facture (responsable).\n"
-        "7. ENVOYER 12 → envoie la facture au client · PDF 12\n"
-        "8. PAYE 12 [montant] [momo|cash|cheque|virement|carte]\n"
-        "ANNULER 12 → supprime le brouillon.")
+AIDE = ("e-FACIL · facturer par message\n"
+        "Envoyez la commande du client (texte, note vocale, photo ou PDF) : je vous pose les questions "
+        "une par une jusqu'à la facture. Répondez par le numéro du choix, une quantité ou un nom.\n"
+        "• STOP : mettre le dossier de côté · REPRENDRE 12 : y revenir · LISTE : brouillons en attente\n"
+        "• BL 12 : 10 cartons… → rattacher la livraison\n"
+        "Raccourcis : VOIR 12 · VALIDER 12 · ENVOYER 12 · PDF 12 · PAYE 12 50000 momo · ANNULER 12")
 
 # Commande -> (code d'anomalie, choix) pour les décisions du responsable.
 DECISIONS_CANAL = {
@@ -259,6 +251,13 @@ def _executer(conn, plateforme, numero, u, type_msg, texte, contenu) -> None:
         if re.fullmatch(r"(?i)(aide|help|menu|\?)", commande):
             repondre(conn, plateforme, numero, AIDE)
             return
+        m = re.fullmatch(r"(?i)reprendre\s*n?°?\s*(\d+)", commande)
+        if m:
+            did = int(m.group(1))
+            S.verifier_acces_dossier(conn, u, did)
+            _annoncer(conn, plateforme, numero, did, "Dossier", suite=False)
+            guider(conn, plateforme, numero, u, did)
+            return
         m = re.fullmatch(r"(?i)liste", commande)
         if m:
             _liste(conn, plateforme, numero, u)
@@ -282,7 +281,11 @@ def _executer(conn, plateforme, numero, u, type_msg, texte, contenu) -> None:
             S.verifier_acces_dossier(conn, u, did)
             d = S.dossier(conn, did)
             S.ajouter_livraison(conn, u, did, d["version"], m.group(2).strip(), S.extracteur_auto(False))
-            _annoncer(conn, plateforme, numero, did, "Livraison rattachée au dossier")
+            _annoncer(conn, plateforme, numero, did, "Livraison rattachée au dossier", suite=False)
+            guider(conn, plateforme, numero, u, did)
+            return
+        session = _session(conn, plateforme, numero)
+        if session.get("q") and _repondre_guide(conn, plateforme, numero, u, session, commande):
             return
     octets = mime = None
     if type_msg in ("audio", "image", "document"):
@@ -307,12 +310,308 @@ def _executer(conn, plateforme, numero, u, type_msg, texte, contenu) -> None:
     with transaction(conn):
         conn.execute("UPDATE messages_canal SET dossier_id = ? WHERE id = (SELECT MAX(id) FROM messages_canal "
                      "WHERE numero = ? AND sens = 'entrant')", (did, numero))
-    _annoncer(conn, plateforme, numero, did, "Brouillon")
-    # Prévenir les responsables habilités (autres numéros) qu'un brouillon attend leur décision.
+    _annoncer(conn, plateforme, numero, did, "Brouillon", suite=False)
+    guider(conn, plateforme, numero, u, did)  # questions une par une, puis le responsable est prévenu
+
+
+# --- Mode guidé : le bot pose les questions une par une jusqu'à la facture ---------------------
+
+MODES_CHOIX = [("MOBILEMONEY", "Mobile money"), ("ESPECES", "Espèces"), ("CHEQUES", "Chèque"),
+               ("VIREMENT", "Virement"), ("CARTEBANCAIRE", "Carte bancaire")]
+OUI = {"1", "oui", "o", "ok", "yes", "d'accord", "dac"}
+NON = {"2", "non", "n", "no"}
+
+
+def _cle_session(plateforme, numero) -> str:
+    return f"session_canal:{plateforme}:{normaliser_numero(numero)}"
+
+
+def _session(conn, plateforme, numero) -> dict:
+    return lire_parametre(conn, _cle_session(plateforme, numero), None) or {}
+
+
+def _memoriser_session(conn, plateforme, numero, session: dict | None) -> None:
+    with transaction(conn):
+        if session:
+            ecrire_parametre(conn, _cle_session(plateforme, numero), session)
+        else:
+            conn.execute("DELETE FROM parametres WHERE cle = ?", (_cle_session(plateforme, numero),))
+
+
+def _peut(u, droit) -> bool:
+    try:
+        S.exiger(u, droit)
+        return True
+    except S.Refus:
+        return False
+
+
+def _choix(texte: str, n: int) -> int | None:
+    """« 1 », « 1. », « oui » (= 1), « non » (= 2) -> numéro du choix, ou None."""
+    t = texte.strip().lower().rstrip(".)")
+    if t in OUI and n >= 1:
+        return 1
+    if t in NON and n >= 2:
+        return 2
+    return int(t) if t.isdigit() and 1 <= int(t) <= n else None
+
+
+def _poser(conn, plateforme, numero, u, did, question: dict, texte: str) -> None:
+    _memoriser_session(conn, plateforme, numero, {"did": did, "q": question})
+    repondre(conn, plateforme, numero, texte, dossier_id=did)
+
+
+def guider(conn, plateforme, numero, u, did) -> None:
+    """Pose la prochaine question du dossier pour cette personne, ou propose l'étape suivante."""
+    d = S.dossier(conn, did)
+    arts = {a["id"]: a for a in S.articles(conn)}
+    lignes = {l["cle"]: l for l in d["brouillon"]["lignes"]}
+    nom_ligne = lambda cle: (arts.get((lignes.get(cle) or {}).get("article_id"), {}).get("designation")  # noqa: E731
+                             or (lignes.get(cle) or {}).get("designation_citee") or "cet article")
+    decideur = _peut(u, "dossier.decider")
+
+    if d["statut"] == "VALIDE" and d.get("facture_id"):
+        f = S.facture(conn, d["facture_id"])
+        if f["statut"] != "CONFIRMEE":
+            _memoriser_session(conn, plateforme, numero, None)
+            return
+        options = ["Envoyer la facture au client"]
+        if f["reste_a_payer"] > 0 and _peut(u, "paiement.enregistrer"):
+            options.append(f"Enregistrer un paiement (reste {format_fcfa(f['reste_a_payer'])})")
+        options.append("Terminer")
+        _poser(conn, plateforme, numero, u, did, {"type": "apres", "options": options},
+               f"Facture {f['numero']} · que faire ?\n" + "\n".join(f"{i}. {o}" for i, o in enumerate(options, 1)))
+        return
+    if d["statut"] != "BROUILLON":
+        _memoriser_session(conn, plateforme, numero, None)
+        return
+
+    for a in d["anomalies"]:
+        if not a["bloquante"] or a["resolue"]:
+            continue
+        code, cle = a["code"], a.get("ligne")
+        if a["cle_decision"] and not decideur:
+            continue  # décision du responsable : on passe aux corrections qui reviennent à la vendeuse
+        if code == "CLIENT_AMBIGU":
+            cands = d["brouillon"]["client"].get("candidats") or []
+            noms = [(S.client(conn, c) or {}).get("nom", c) for c in cands]
+            _poser(conn, plateforme, numero, u, did, {"type": "client", "candidats": cands},
+                   "Quel client ?\n" + "\n".join(f"{i}. {n}" for i, n in enumerate(noms, 1))
+                   + "\nRépondez par le numéro, ou par un autre nom.")
+            return
+        if code == "CLIENT_INCONNU":
+            cite = d["brouillon"]["client"].get("nom_cite")
+            _poser(conn, plateforme, numero, u, did, {"type": "client", "candidats": []},
+                   (f"Je ne connais pas « {cite} ». " if cite else "") + "Quel est le client ? Répondez par son nom.")
+            return
+        if code in ("QUANTITE_MANQUANTE", "QUANTITE_INVALIDE") and cle:
+            _poser(conn, plateforme, numero, u, did, {"type": "quantite", "ligne": cle},
+                   f"Quelle quantité pour « {nom_ligne(cle)} » ? Répondez par un nombre (0 pour retirer la ligne).")
+            return
+        if code == "ARTICLE_INCONNU":
+            if cle:
+                cite = (lignes.get(cle) or {}).get("designation_citee") or "cet article"
+                _poser(conn, plateforme, numero, u, did, {"type": "article", "ligne": cle},
+                       f"« {cite} » n'est pas dans le catalogue. Répondez par le nom de l'article, ou 0 pour retirer la ligne.")
+            else:
+                _poser(conn, plateforme, numero, u, did, {"type": "ajout"},
+                       "Aucun article reconnu. Répondez par la quantité et l'article, par exemple : 5 sacs de riz.")
+            return
+        if code == "ECART_COMMANDE_LIVRAISON":
+            l = lignes.get(cle) or {}
+            _poser(conn, plateforme, numero, u, did, {"type": "decision", "cle": a["cle_decision"],
+                                                      "choix": ["facturer_livre", None]},
+                   f"« {nom_ligne(cle)} » : {l.get('quantite_commandee')} commandé(s), {l.get('quantite_livree')} livré(s).\n"
+                   f"1. Facturer le livré ({l.get('quantite_livree')})\n2. Attendre le reste de la livraison")
+            return
+        if code == "REMISE_A_VALIDER":
+            _poser(conn, plateforme, numero, u, did, {"type": "decision", "cle": a["cle_decision"],
+                                                      "choix": ["accepter", "refuser"]},
+                   f"{a['message']}\n1. Accorder la remise\n2. Refuser")
+            return
+        if code == "PRIX_INHABITUEL":
+            _poser(conn, plateforme, numero, u, did, {"type": "decision", "cle": a["cle_decision"],
+                                                      "choix": ["prix_catalogue", "prix_cite"]},
+                   f"{a['message']}\n1. Garder le prix du catalogue\n2. Appliquer le prix cité (je vous demanderai pourquoi)")
+            return
+        if code == "TOTAL_INCOHERENT":
+            _poser(conn, plateforme, numero, u, did, {"type": "decision", "cle": a["cle_decision"],
+                                                      "choix": ["total_recalcule", None]},
+                   f"{a['message']}\n1. Facturer le total recalculé\n2. Plus tard")
+            return
+        if code == "DOUBLON_PROBABLE":
+            _poser(conn, plateforme, numero, u, did, {"type": "doublon", "cle": a["cle_decision"]},
+                   f"{a['message']}\n1. Ce n'est pas un doublon, on continue\n2. C'est un doublon : supprimer ce brouillon")
+            return
+
+    restantes = [a for a in d["anomalies"] if a["bloquante"] and not a["resolue"]]
+    if restantes:  # il ne reste que des décisions du responsable
+        _memoriser_session(conn, plateforme, numero, None)
+        repondre(conn, plateforme, numero, "C'est tout pour vous. Le responsable tranchera : "
+                 + ", ".join(a["titre"].lower() for a in restantes) + ". Il est prévenu.", dossier_id=did)
+        _prevenir_responsables(conn, plateforme, numero, u, did)
+        return
+    if _peut(u, "facture.valider"):
+        total = format_fcfa(d["totaux"]["net_a_payer"]) if d.get("totaux") else "à calculer"
+        _poser(conn, plateforme, numero, u, did, {"type": "valider"},
+               f"Tout est vérifié. Net à payer : {total}.\n1. Valider et émettre la facture\n2. Plus tard")
+        return
+    _memoriser_session(conn, plateforme, numero, None)
+    repondre(conn, plateforme, numero, "Le brouillon est complet. Le responsable va le valider : il est prévenu.",
+             dossier_id=did)
+    _prevenir_responsables(conn, plateforme, numero, u, did)
+
+
+def _prevenir_responsables(conn, plateforme, numero, u, did) -> None:
+    """Prévient les responsables habilités et leur pose directement la première question du dossier."""
     for h in habilites(conn, plateforme):
-        if h["role"] == "responsable" and h["cle"] != numero:
-            repondre(conn, plateforme, h["cle"], f"Nouveau brouillon n° {did} préparé par {u['nom']}.\n"
-                     + _resume(conn, did) + f"\nPour valider : VALIDER {did}", dossier_id=did)
+        if h["role"] != "responsable" or h["cle"] == normaliser_numero(numero):
+            continue
+        if _session(conn, plateforme, h["cle"]).get("q"):  # déjà en train de traiter un autre dossier
+            repondre(conn, plateforme, h["cle"], f"Brouillon n° {did} préparé par {u['nom']} : REPRENDRE {did} "
+                     "quand vous aurez fini.", dossier_id=did)
+            continue
+        repondre(conn, plateforme, h["cle"], f"Brouillon n° {did} préparé par {u['nom']}.\n" + _resume(conn, did),
+                 dossier_id=did)
+        responsable = utilisateur_du_numero(conn, h["cle"], plateforme)
+        if responsable:
+            guider(conn, plateforme, h["cle"], responsable, did)
+
+
+def _repondre_guide(conn, plateforme, numero, u, session, texte) -> bool:
+    """Traite la réponse à la question en cours. Renvoie False si le message n'est pas une réponse."""
+    did, q = session["did"], session["q"]
+    t = texte.strip()
+    if re.fullmatch(r"(?i)stop|pause|plus tard|annuler", t):
+        _memoriser_session(conn, plateforme, numero, None)
+        repondre(conn, plateforme, numero, f"Dossier n° {did} mis de côté. REPRENDRE {did} pour y revenir.", dossier_id=did)
+        return True
+    S.verifier_acces_dossier(conn, u, did)
+    d = S.dossier(conn, did)
+    typ = q["type"]
+    nombre_choix = {"decision": 2, "doublon": 2, "valider": 2, "apres": len(q.get("options", [])),
+                    "mode": len(MODES_CHOIX)}.get(typ)
+    if nombre_choix and _choix(t, nombre_choix) is None:
+        if len(t) > 25:  # un long message est une nouvelle commande, pas une réponse
+            _memoriser_session(conn, plateforme, numero, None)
+            repondre(conn, plateforme, numero, f"Je mets le dossier n° {did} de côté (REPRENDRE {did}) et j'ouvre une nouvelle commande.")
+            return False
+        repondre(conn, plateforme, numero, f"Répondez par un chiffre de 1 à {nombre_choix}, ou STOP.", dossier_id=did)
+        return True
+
+    if typ == "client":
+        cands = q.get("candidats") or []
+        n = _choix(t, len(cands)) if cands else None
+        if cands and not n and t.isdigit():
+            repondre(conn, plateforme, numero, f"Répondez par un chiffre de 1 à {len(cands)}, ou par un nom.", dossier_id=did)
+            return True
+        if n:
+            cid = cands[n - 1]
+        else:
+            trouves, _ = B.trouver_clients(t, S.clients(conn))
+            if len(trouves) != 1:
+                noms = [(S.client(conn, c) or {}).get("nom", c) for c in trouves]
+                if trouves:
+                    _poser(conn, plateforme, numero, u, did, {"type": "client", "candidats": trouves},
+                           "Plusieurs clients correspondent :\n" + "\n".join(f"{i}. {n}" for i, n in enumerate(noms, 1)))
+                else:
+                    repondre(conn, plateforme, numero, f"Aucun client « {t} ». Réessayez avec un autre nom, "
+                             "ou créez sa fiche dans e-FACIL puis REPRENDRE " + str(did) + ".", dossier_id=did)
+                return True
+            cid = trouves[0]
+        S.corriger(conn, u, did, d["version"], {"client_id": cid})
+        repondre(conn, plateforme, numero, f"Client : {(S.client(conn, cid) or {}).get('nom')} ✓", dossier_id=did)
+    elif typ == "quantite":
+        q_txt = t.replace(",", ".")
+        if not re.fullmatch(r"\d+(\.\d+)?", q_txt):
+            repondre(conn, plateforme, numero, "Répondez par un nombre, par exemple 5 ou 2,5.", dossier_id=did)
+            return True
+        champ = {f"{q['ligne']}:supprimer": "1"} if float(q_txt) == 0 else {f"{q['ligne']}:quantite_commandee": q_txt}
+        S.corriger(conn, u, did, d["version"], champ)
+        repondre(conn, plateforme, numero, "Ligne retirée ✓" if float(q_txt) == 0 else f"Quantité : {t} ✓", dossier_id=did)
+    elif typ == "article":
+        if t == "0":
+            S.corriger(conn, u, did, d["version"], {f"{q['ligne']}:supprimer": "1"})
+            repondre(conn, plateforme, numero, "Ligne retirée ✓", dossier_id=did)
+        else:
+            aid, _ = B.trouver_article(t, S.articles(conn))
+            if not aid:
+                repondre(conn, plateforme, numero, f"« {t} » n'est pas dans le catalogue non plus. Autre nom, ou 0 pour retirer.",
+                         dossier_id=did)
+                return True
+            S.corriger(conn, u, did, d["version"], {f"{q['ligne']}:article_id": aid})
+            designation = next(a["designation"] for a in S.articles(conn) if a["id"] == aid)
+            repondre(conn, plateforme, numero, f"Article : {designation} ✓", dossier_id=did)
+    elif typ == "ajout":
+        m = re.fullmatch(r"([\d.,]+)\s+(.+)", t)
+        aid = B.trouver_article(m.group(2), S.articles(conn))[0] if m else None
+        if not aid:
+            repondre(conn, plateforme, numero, "Je n'ai pas compris. Exemple : 5 sacs de riz.", dossier_id=did)
+            return True
+        S.corriger(conn, u, did, d["version"], {"nouvel_article": aid, "nouvelle_quantite": m.group(1)})
+        repondre(conn, plateforme, numero, "Ligne ajoutée ✓", dossier_id=did)
+    elif typ == "decision":
+        choix = q["choix"][_choix(t, 2) - 1]
+        if choix is None:  # « attendre » ou « plus tard »
+            _memoriser_session(conn, plateforme, numero, None)
+            repondre(conn, plateforme, numero, f"D'accord, le dossier n° {did} attend. Envoyez BL {did} : … à la suite "
+                     f"de la livraison, ou REPRENDRE {did}.", dossier_id=did)
+            return True
+        if choix == "prix_cite":
+            _poser(conn, plateforme, numero, u, did, {"type": "raison_prix", "cle": q["cle"]},
+                   "Pourquoi le prix cité s'applique-t-il ? (quelques mots, notés au journal)")
+            return True
+        S.decider(conn, u, did, d["version"], q["cle"], choix)
+        repondre(conn, plateforme, numero, "Décision enregistrée ✓", dossier_id=did)
+    elif typ == "raison_prix":
+        S.decider(conn, u, did, d["version"], q["cle"], "prix_cite", t)
+        repondre(conn, plateforme, numero, "Prix cité appliqué, raison notée au journal ✓", dossier_id=did)
+    elif typ == "doublon":
+        if _choix(t, 2) == 2:
+            _memoriser_session(conn, plateforme, numero, None)
+            _annuler(conn, plateforme, numero, u, did)
+            return True
+        S.decider(conn, u, did, d["version"], q["cle"], "pas_un_doublon")
+        repondre(conn, plateforme, numero, "Noté : ce n'est pas un doublon ✓", dossier_id=did)
+    elif typ == "valider":
+        if _choix(t, 2) == 2:
+            _memoriser_session(conn, plateforme, numero, None)
+            repondre(conn, plateforme, numero, f"D'accord. VALIDER {did} quand vous voulez.", dossier_id=did)
+            return True
+        _valider(conn, plateforme, numero, u, did)  # pose elle-même la question suivante
+        return True
+    elif typ == "apres":
+        option = q["options"][_choix(t, len(q["options"])) - 1]
+        if option.startswith("Envoyer"):
+            _envoyer(conn, plateforme, numero, u, did)
+        elif option.startswith("Enregistrer"):
+            f = S.facture(conn, S.dossier(conn, did)["facture_id"])
+            _poser(conn, plateforme, numero, u, did, {"type": "montant"},
+                   f"Combien le client a-t-il payé ? Répondez par un montant, ou TOUT ({format_fcfa(f['reste_a_payer'])}).")
+            return True
+        else:
+            _memoriser_session(conn, plateforme, numero, None)
+            repondre(conn, plateforme, numero, f"Dossier n° {did} terminé ✓", dossier_id=did)
+            return True
+    elif typ == "montant":
+        f = S.facture(conn, d["facture_id"])
+        if t.lower() in ("tout", "tous", "total", "la totalité"):
+            montant = f["reste_a_payer"]
+        else:
+            chiffres = re.sub(r"\D", "", t)
+            if not chiffres or int(chiffres) <= 0:
+                repondre(conn, plateforme, numero, "Répondez par un montant (ex. 50000) ou TOUT.", dossier_id=did)
+                return True
+            montant = int(chiffres)
+        _poser(conn, plateforme, numero, u, did, {"type": "mode", "montant": montant},
+               f"Paiement de {format_fcfa(montant)}, par quel moyen ?\n"
+               + "\n".join(f"{i}. {lib}" for i, (_, lib) in enumerate(MODES_CHOIX, 1)))
+        return True
+    elif typ == "mode":
+        mode = MODES_CHOIX[_choix(t, len(MODES_CHOIX)) - 1][0]
+        _payer(conn, plateforme, numero, u, did, f"{q['montant']} {next(k for k, v in MODES_CANAL.items() if v == mode)}")
+    guider(conn, plateforme, numero, u, did)
+    return True
 
 
 def _commande_dossier(conn, plateforme, numero, u, verbe, did, reste) -> None:
@@ -448,7 +747,7 @@ def _liste(conn, plateforme, numero, u) -> None:
              if lignes else "Aucun brouillon en attente.")
 
 
-def _resume(conn, did: int) -> str:
+def _resume(conn, did: int, conseils: bool = True) -> str:
     d = S.dossier(conn, did)
     br = d["brouillon"]
     arts = {a["id"]: a for a in S.articles(conn)}
@@ -469,27 +768,28 @@ def _resume(conn, did: int) -> str:
         lignes.append(f"À vérifier ({len(a_trancher)}) :")
         for a in a_trancher:
             conseil = CONSEILS.get(a["code"], "à corriger dans e-FACIL").format(d=did, l=numeros_ligne.get(a.get("ligne"), "n°"))
-            lignes.append(f"⚠ {a['titre']} → {conseil}")
+            lignes.append(f"⚠ {a['titre']}" + (f" → {conseil}" if conseils else ""))
     return "\n".join(lignes)
 
 
-def _annoncer(conn, plateforme, numero, did, titre) -> None:
+def _annoncer(conn, plateforme, numero, did, titre, suite: bool = True) -> None:
     """Résumé du dossier et prochaine étape du parcours, selon son état et le rôle de la personne."""
     u = utilisateur_du_numero(conn, numero, plateforme) or {}
     decideur = u.get("role") == "responsable" or u.get("mode_solo")
     d = S.dossier(conn, did)
     if d["statut"] == "VALIDE" and d.get("facture_id"):
         f = S.facture(conn, d["facture_id"])
-        suite = (f"Facture {f['numero']} · reste à payer {format_fcfa(f['reste_a_payer'])}.\n"
+        prochaine = (f"Facture {f['numero']} · reste à payer {format_fcfa(f['reste_a_payer'])}.\n"
                  f"ENVOYER {did} · PAYE {did} montant mode · PDF {did}")
     elif d["statut"] != "BROUILLON":
-        suite = "Ce dossier n'est plus modifiable."
+        prochaine = "Ce dossier n'est plus modifiable."
     elif any(a["bloquante"] and not a["resolue"] for a in d["anomalies"]):
-        suite = ("Réglez les points ci-dessus, puis VALIDER " + str(did) + "." if decideur
+        prochaine = ("Réglez les points ci-dessus, puis VALIDER " + str(did) + "." if decideur
                  else "Corrigez ce qui vous revient ; un responsable tranchera le reste.")
     else:
-        suite = f"Tout est prêt : VALIDER {did}" if decideur else "Prêt : un responsable va le valider."
-    repondre(conn, plateforme, numero, f"{titre} n° {did}\n" + _resume(conn, did) + "\n" + suite, dossier_id=did)
+        prochaine = f"Tout est prêt : VALIDER {did}" if decideur else "Prêt : un responsable va le valider."
+    texte = f"{titre} n° {did}\n" + _resume(conn, did, conseils=suite) + ("\n" + prochaine if suite else "")
+    repondre(conn, plateforme, numero, texte, dossier_id=did)
 
 
 def _valider(conn, plateforme, numero, u, did) -> None:
@@ -514,6 +814,7 @@ def _valider(conn, plateforme, numero, u, did) -> None:
             repondre(conn, plateforme, h["cle"], f"Votre brouillon n° {did} est validé : facture {f['numero']}.",
                      dossier_id=did, facture_id=fid)
             repondre(conn, plateforme, h["cle"], f"{f['numero']}.pdf", type_msg="document", dossier_id=did, facture_id=fid)
+    guider(conn, plateforme, numero, u, did)
 
 
 def _annuler(conn, plateforme, numero, u, did) -> None:

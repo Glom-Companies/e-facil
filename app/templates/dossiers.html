@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block titre %}À vérifier{% endblock %}
+{% block contenu %}
+<div class="entete-page">
+  <div><h1>À vérifier</h1><p class="sous">Les commandes en brouillon et les factures validées qui attendent leur émission.</p></div>
+  {% if u.role in ('vendeur','responsable') %}<a class="btn btn-primary" href="/dossiers/nouveau"><i class="ti ti-plus"></i>&nbsp;Nouvelle commande</a>{% endif %}
+</div>
+<div class="row g-4">
+  <div class="col-lg-8">
+    <div class="carte">
+      <div class="onglets">
+        <button type="button" class="actif" data-filtre="tous">Toutes ({{ brouillons|length }})</button>
+        <button type="button" data-filtre="bloque">À corriger ({{ brouillons|selectattr('bloquantes')|list|length }})</button>
+        <button type="button" data-filtre="pret">Prêtes à valider ({{ brouillons|rejectattr('bloquantes')|list|length }})</button>
+      </div>
+      <ul class="liste" id="liste">
+        {% for d in brouillons %}
+        <li data-etat="{{ 'bloque' if d.bloquantes else 'pret' }}">
+          <span class="icone-carre {{ 'rouge' if d.bloquantes else 'accent' }}"><i class="ti {{ 'ti-alert-triangle' if d.bloquantes else 'ti-circle-check' }}"></i></span>
+          <a class="ligne-lien" href="/dossiers/{{ d.id }}"><div class="l-corps">
+            <div class="l-titre">{{ d.client_nom }} <span class="text-secondary fw-normal">· dossier {{ d.id }}</span></div>
+            <div class="l-sous">{{ CANAUX.get(d.canal, d.canal) }} · {{ d.cree_le|date_fr }} ·
+              {% if d.bloquantes %}<span class="text-danger">{{ d.bloquantes|map(attribute='titre')|join(', ') }}</span>{% else %}<span class="text-success">tous les contrôles sont passés</span>{% endif %}</div>
+          </div></a>
+          <div class="l-droite"><div class="l-montant">{{ d.totaux.total_ttc|fcfa if d.totaux else '—' }}</div><div class="l-sous">{{ d.brouillon.lignes|length }} article(s)</div></div>
+        </li>
+        {% else %}
+        <li class="vide d-block"><i class="ti ti-inbox"></i>Aucune commande en attente.</li>
+        {% endfor %}
+      </ul>
+    </div>
+  </div>
+  <div class="col-lg-4">
+    <div class="titre-bloc"><h2>À émettre vers la DGI</h2></div>
+    <div class="carte">
+      <ul class="liste">
+        {% for f in a_emettre %}
+        <li><span class="icone-carre ambre"><i class="ti ti-send"></i></span>
+          <a class="ligne-lien" href="/factures/{{ f.id }}"><div class="l-corps"><div class="l-titre">{{ f.contenu.client.nom }}</div><div class="l-sous mono">{{ f.numero }}</div></div></a>
+          <div class="l-droite"><span class="etat etat-{{ f.statut }}">{{ STATUTS[f.statut] }}</span></div></li>
+        {% else %}
+        <li class="vide d-block"><i class="ti ti-circle-check"></i>Tout est émis.</li>
+        {% endfor %}
+      </ul>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+document.querySelectorAll('[data-filtre]').forEach(b => b.addEventListener('click', () => {
+  document.querySelectorAll('[data-filtre]').forEach(x => x.classList.toggle('actif', x === b));
+  document.querySelectorAll('#liste li[data-etat]').forEach(li => { li.hidden = !(b.dataset.filtre === 'tous' || li.dataset.etat === b.dataset.filtre); });
+}));
+</script>
+{% endblock %}

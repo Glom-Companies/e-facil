@@ -1,27 +1,44 @@
 {% extends "base.html" %}
 {% block titre %}Factures{% endblock %}
 {% block contenu %}
-<div class="entete-page"><div><h1>Factures et avoirs</h1><p class="sous">Documents validés. Ils ne se modifient plus.</p></div></div>
-<div class="card">
+<div class="entete-page"><div><h1>Factures et avoirs</h1><p class="sous">Documents validés : ils ne se modifient plus. Une correction passe par un avoir.</p></div></div>
+<div class="carte">
+  <div class="onglets">
+    <button type="button" class="actif" data-filtre="tous">Tous ({{ factures|length }})</button>
+    <button type="button" data-filtre="FV">Ventes</button>
+    <button type="button" data-filtre="FA">Avoirs</button>
+    <button type="button" data-filtre="attente">À émettre</button>
+  </div>
   {% if factures %}
   <div class="table-responsive">
-  <table class="table table-vcenter card-table table-responsive-empile">
-    <thead><tr><th>Numéro</th><th>Type</th><th>Client</th><th>Validée le</th><th>État</th><th class="num">Total TTC</th><th class="num">Net à payer</th></tr></thead>
+  <table class="tableau table-empile" id="table-factures">
+    <thead><tr><th>Document</th><th>Client</th><th>Validée le</th><th>Paiement</th><th>État</th><th class="num">Total TTC</th><th class="num">Net à payer</th></tr></thead>
     <tbody>
     {% for f in factures %}
-    <tr>
-      <td data-label="Numéro"><a class="mono" href="/factures/{{ f.id }}">{{ f.numero }}</a></td>
-      <td data-label="Type">{{ 'Avoir' if f.type == 'FA' else 'Vente' }}</td>
+    <tr data-type="{{ f.type }}" data-attente="{{ '1' if f.statut in ('VALIDEE','EN_ATTENTE_DGI') else '0' }}">
+      <td data-label="Document"><span class="d-inline-flex align-items-center gap-2"><span class="icone-carre {{ 'ambre' if f.type == 'FA' else 'accent' }}" style="width:34px;height:34px"><i class="ti {{ 'ti-receipt-refund' if f.type == 'FA' else 'ti-file-invoice' }}"></i></span><a class="mono" href="/factures/{{ f.id }}">{{ f.numero }}</a></span></td>
       <td data-label="Client">{{ f.contenu.client.nom }}</td>
       <td data-label="Validée le" class="text-secondary">{{ f.valide_le|date_fr }}</td>
+      <td data-label="Paiement" class="text-secondary">{{ PAIEMENTS.get(f.contenu.mode_paiement, '—') }}</td>
       <td data-label="État"><span class="etat etat-{{ f.statut }}">{{ STATUTS[f.statut] }}</span></td>
-      <td data-label="Total TTC" class="num">{% if f.type == 'FA' %}−{% endif %}{{ f.total_ttc|fcfa }}</td>
+      <td data-label="Total TTC" class="num fw-bold">{% if f.type == 'FA' %}−{% endif %}{{ f.total_ttc|fcfa }}</td>
       <td data-label="Net à payer" class="num">{% if f.type == 'FA' %}−{% endif %}{{ f.net_a_payer|fcfa }}</td>
     </tr>
     {% endfor %}
     </tbody>
   </table>
   </div>
-  {% else %}<p class="vide">Aucune facture.</p>{% endif %}
+  {% else %}<p class="vide mb-0"><i class="ti ti-file-invoice"></i>Aucune facture pour l'instant.</p>{% endif %}
 </div>
+{% endblock %}
+{% block scripts %}
+<script>
+document.querySelectorAll('[data-filtre]').forEach(b => b.addEventListener('click', () => {
+  document.querySelectorAll('[data-filtre]').forEach(x => x.classList.toggle('actif', x === b));
+  const f = b.dataset.filtre;
+  document.querySelectorAll('#table-factures tbody tr').forEach(tr => {
+    tr.hidden = !(f === 'tous' || tr.dataset.type === f || (f === 'attente' && tr.dataset.attente === '1'));
+  });
+}));
+</script>
 {% endblock %}

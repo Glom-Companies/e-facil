@@ -3,6 +3,7 @@
 {% set t = c.totaux %}
 {% block titre %}{{ f.numero }}{% endblock %}
 {% block contenu %}
+<div class="fil"><a href="/factures">Factures</a> / {{ f.numero }}</div>
 <div class="entete-page">
   <div>
     <h1>{% if f.type == 'FA' %}Avoir{% else %}Facture{% endif %} <span class="mono">{{ f.numero }}</span> <span class="etat etat-{{ f.statut }}">{{ STATUTS[f.statut] }}</span></h1>
@@ -15,7 +16,13 @@
   </div>
 </div>
 
-<div class="alert alert-secondary small">Document verrouillé : ni l'application ni la base de données n'acceptent de le modifier. Une correction passe par un {{ aide('avoir') }}.</div>
+<ol class="etapes">
+  <li class="fait"><span class="n"><i class="ti ti-check"></i></span><span><strong>Commande lue</strong>et vérifiée</span></li>
+  <li class="fait"><span class="n"><i class="ti ti-check"></i></span><span><strong>Validée</strong>{{ f.valide_le|date_fr }}</span></li>
+  <li class="{{ 'fait' if f.statut == 'CONFIRMEE' else ('encours' if f.statut in ('VALIDEE','EN_ATTENTE_DGI') else '') }}"><span class="n">{% if f.statut == 'CONFIRMEE' %}<i class="ti ti-check"></i>{% else %}3{% endif %}</span><span><strong>Émise</strong>{{ 'code DGI reçu' if f.statut == 'CONFIRMEE' else STATUTS[f.statut]|lower }}</span></li>
+  {% if f.type == 'FV' %}<li class="{{ 'fait' if f.statut == 'CONFIRMEE' and f.reste_a_payer <= 0 else ('encours' if f.statut == 'CONFIRMEE' else '') }}"><span class="n">{% if f.statut == 'CONFIRMEE' and f.reste_a_payer <= 0 %}<i class="ti ti-check"></i>{% else %}4{% endif %}</span><span><strong>Payée</strong>{{ 'soldée' if f.reste_a_payer <= 0 else 'reste ' ~ (f.reste_a_payer|fcfa) }}</span></li>{% endif %}
+</ol>
+<div class="alert alert-secondary small"><i class="ti ti-lock"></i> Document verrouillé : ni l'application ni la base de données n'acceptent de le modifier. Une correction passe par un {{ aide('avoir') }}.</div>
 
 <div class="row g-3">
   <div class="col-lg-8">

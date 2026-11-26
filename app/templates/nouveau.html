@@ -2,68 +2,56 @@
 {% block titre %}Nouvelle commande{% endblock %}
 {% block contenu %}
 <div class="entete-page">
-  <div><h1>Nouvelle commande</h1><p class="sous">Collez le message du client tel quel. Rien n'est facturé avant la validation d'un responsable.</p></div>
+  <div><h1>Nouvelle commande</h1><p class="sous">Collez le message du client tel quel, ou joignez la photo du bon de commande. Rien n'est facturé sans la validation d'un responsable.</p></div>
 </div>
-<form method="post" action="/dossiers/nouveau" enctype="multipart/form-data" class="row g-3" id="form-commande">
+<form method="post" action="/dossiers/nouveau" enctype="multipart/form-data" class="row g-4" id="form-commande">
   <input type="hidden" name="csrf" value="{{ csrf }}">
-  <div class="col-lg-8">
-    <div class="card">
-      <div class="card-header"><h2 class="card-title">Bon de commande</h2></div>
-      <div class="card-body">
-        <div class="row g-2 mb-3">
-          <div class="col-sm-6">
-            <label class="form-label" for="canal">Reçu par</label>
-            <select class="form-select" id="canal" name="canal">
-              {% for k, v in CANAUX.items() %}<option value="{{ k }}">{{ v }}</option>{% endfor %}
-            </select>
-          </div>
-          <div class="col-sm-6">
-            <label class="form-label" for="extracteur">Lecture du message</label>
-            <select class="form-select" id="extracteur" name="extracteur">
-              {% for k, v in EXTRACTEURS.items() %}<option value="{{ k }}" {% if k == extracteur_defaut %}selected{% endif %}>{{ v }}</option>{% endfor %}
-            </select>
-          </div>
-        </div>
-        <label class="form-label" for="texte_commande">Message du client</label>
-        <textarea class="form-control mono" id="texte_commande" name="texte_commande" rows="7"
-          placeholder="Bjr, c'est Dossou. Envoie 12 cartons de savon et 5 sacs de riz. Je paie momo"></textarea>
-        <div class="mt-3">
-          <label class="form-label" for="document">Ou photo ou PDF du bon de commande <span class="text-secondary">(lecture par l'IA Gemini)</span></label>
+  <div class="col-xl-8">
+    <div class="titre-bloc"><h2>Bon de commande</h2></div>
+    <div class="carte">
+      <div class="small text-secondary mb-2">Essayer avec un exemple (fictif) :</div>
+      <div class="puces mb-3">
+        {% for e in exemples %}<button type="button" class="puce" data-index="{{ loop.index0 }}">{{ e.titre }}</button>{% endfor %}
+      </div>
+      <label class="form-label" for="texte_commande">Message du client</label>
+      <textarea class="form-control mono" id="texte_commande" name="texte_commande" rows="7"
+        placeholder="Bjr, c'est Dossou. Envoie 12 cartons de savon et 5 sacs de riz. Je paie momo"></textarea>
+      <div class="row g-3 mt-1">
+        <div class="col-md-6">
+          <label class="form-label" for="document"><i class="ti ti-camera"></i> Ou photo / PDF du bon de commande</label>
           <input class="form-control" type="file" id="document" name="document" accept="image/jpeg,image/png,image/webp,application/pdf">
+          <span class="champ-cite">Lu par l'IA Gemini, puis transcrit pour vérification.</span>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label" for="canal">Reçu par</label>
+          <select class="form-select" id="canal" name="canal">{% for k, v in CANAUX.items() %}<option value="{{ k }}">{{ v }}</option>{% endfor %}</select>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label" for="extracteur">Lecture</label>
+          <select class="form-select" id="extracteur" name="extracteur">{% for k, v in EXTRACTEURS.items() %}<option value="{{ k }}" {% if k == extracteur_defaut %}selected{% endif %}>{{ v }}</option>{% endfor %}</select>
         </div>
       </div>
     </div>
-    <div class="card mt-3">
-      <div class="card-header"><h2 class="card-title">Bon de livraison <span class="text-secondary fw-normal">(facultatif, peut être ajouté plus tard)</span></h2></div>
-      <div class="card-body">
-        <textarea class="form-control mono" id="texte_livraison" name="texte_livraison" rows="3"
-          placeholder="BL 0231 - Ets Dossou : 10 cartons de savon, 5 sacs de riz. Reçu par le magasinier."></textarea>
-        <p class="text-secondary small mt-2 mb-0">On facture ce qui est livré. Un écart avec la commande bloque la validation jusqu'à la décision d'un responsable.</p>
-      </div>
+    <div class="titre-bloc mt-4"><h2>Bon de livraison <span class="fw-normal small">(facultatif, ajoutable plus tard)</span></h2></div>
+    <div class="carte">
+      <textarea class="form-control mono" id="texte_livraison" name="texte_livraison" rows="3"
+        placeholder="BL 0231 - Ets Dossou : 10 cartons de savon, 5 sacs de riz. Reçu par le magasinier."></textarea>
+      <span class="champ-cite"><i class="ti ti-info-circle"></i> On facture ce qui est livré. Un écart avec la commande sera signalé au responsable.</span>
     </div>
-    <div class="actions mt-3">
-      <button class="btn btn-primary" type="submit">Lire la commande et préparer le brouillon</button>
+    <div class="actions mt-4">
+      <button class="btn btn-primary btn-grand" type="submit"><i class="ti ti-sparkles"></i>&nbsp;Lire la commande et préparer le brouillon</button>
       <a class="btn btn-ghost-secondary" href="/">Annuler</a>
     </div>
   </div>
-  <div class="col-lg-4">
-    <div class="card">
-      <div class="card-header"><h2 class="card-title">Exemples de messages</h2></div>
-      <div class="card-body">
-        <p class="text-secondary small">Messages fictifs pour la démonstration. Un clic remplit le formulaire.</p>
-        <div class="exemples">
-          {% for e in exemples %}
-          <button type="button" class="btn btn-sm btn-outline-secondary" data-index="{{ loop.index0 }}">{{ e.titre }}</button>
-          {% endfor %}
-        </div>
-      </div>
-    </div>
-    <div class="card mt-3">
-      <div class="card-body small text-secondary">
-        <p class="mb-2"><strong class="text-body">Ce que fait la lecture</strong></p>
-        <p class="mb-2">Elle repère le client, les articles, les quantités et les prix cités, et note pour chacun le passage exact du message.</p>
-        <p class="mb-0">Elle ne calcule rien et n'invente rien : une information absente reste vide. Les montants sont calculés par le logiciel, selon les règles de la DGI.</p>
-      </div>
+  <div class="col-xl-4">
+    <div class="titre-bloc"><h2>Ce qui va se passer</h2></div>
+    <div class="carte">
+      <ul class="liste">
+        <li><span class="icone-carre accent"><i class="ti ti-quote"></i></span><div class="l-corps"><div class="l-titre">Lecture avec preuves</div><div class="l-sous">Client, articles, quantités et prix sont repérés, chacun avec la phrase exacte du message.</div></div></li>
+        <li><span class="icone-carre accent"><i class="ti ti-ban"></i></span><div class="l-corps"><div class="l-titre">Rien d'inventé</div><div class="l-sous">Une information absente reste vide. Une valeur sans preuve dans le message est écartée.</div></div></li>
+        <li><span class="icone-carre accent"><i class="ti ti-shield-check"></i></span><div class="l-corps"><div class="l-titre">11 contrôles</div><div class="l-sous">Client inconnu, livraison incomplète, prix inhabituel, doublon, total faux, remise, consigne suspecte…</div></div></li>
+        <li><span class="icone-carre accent"><i class="ti ti-calculator"></i></span><div class="l-corps"><div class="l-titre">Calcul selon la DGI</div><div class="l-sous">TVA, AIB et net à payer sont calculés par le logiciel, jamais par l'IA.</div></div></li>
+      </ul>
     </div>
   </div>
 </form>
@@ -76,10 +64,11 @@ document.querySelectorAll('[data-index]').forEach(b => b.addEventListener('click
   document.getElementById('texte_commande').value = e.commande || '';
   document.getElementById('texte_livraison').value = e.livraison || '';
   document.getElementById('canal').value = e.canal || 'WHATSAPP';
+  document.querySelectorAll('[data-index]').forEach(x => x.style.borderColor = x === b ? 'var(--accent)' : '');
 }));
 document.getElementById('form-commande').addEventListener('submit', e => {
   const b = e.target.querySelector('button[type=submit]');
-  b.disabled = true; b.textContent = 'Lecture en cours…';
+  b.disabled = true; b.innerHTML = '<span class="spinner-border spinner-border-sm"></span>&nbsp;Lecture en cours…';
 });
 </script>
 {% endblock %}

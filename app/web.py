@@ -138,8 +138,23 @@ def verifier_csrf(request: Request, jeton: str) -> None:
         raise S.Refus("Formulaire expiré. Rechargez la page.")
 
 
+JOURS = ["lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"]
+MOIS = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre",
+        "décembre"]
+
+
+def date_du_jour() -> str:
+    from datetime import date
+    d = date.today()
+    return f"{JOURS[d.weekday()].capitalize()} {d.day} {MOIS[d.month - 1]} {d.year}"
+
+
 def page(request: Request, nom: str, c, u, **ctx):
-    ctx.update(request=request, u=u, csrf=jeton_csrf(request), entreprise=S.entreprise(c),
+    if u:
+        ctx.setdefault("nb_a_traiter", c.execute(
+            "SELECT (SELECT COUNT(*) FROM dossiers WHERE statut = 'BROUILLON') + "
+            "(SELECT COUNT(*) FROM factures WHERE statut IN ('VALIDEE', 'EN_ATTENTE_DGI'))").fetchone()[0])
+    ctx.update(request=request, u=u, csrf=jeton_csrf(request), entreprise=S.entreprise(c), aujourdhui=date_du_jour(),
                flash=request.session.pop("flash", None), erreur=request.session.pop("erreur", None),
                idem=str(uuid.uuid4()))
     return modeles.TemplateResponse(request, nom, ctx)
@@ -229,26 +244,57 @@ def avec_utilisateur(fonction):
 
 # --- Tableau de bord ---------------------------------------------------------------------
 
+def _brouillons(c, limite=50) -> list[dict]:
+    res = []
+    for r in c.execute("SELECT id FROM dossiers WHERE statut = 'BROUILLON' ORDER BY id DESC LIMIT ?", (limite,)):
+        d = S.dossier(c, r["id"])
+        cl = S.client(c, d["brouillon"]["client"].get("id"))
+        d["client_nom"] = cl["nom"] if cl else (d["brouillon"]["client"].get("nom_cite") or "Client à préciser")
+        d["bloquantes"] = [a for a in d["anomalies"] if a["bloquante"] and not a["resolue"]]
+        res.append(d)
+    return res
+
+
+ICONES_CONTROLES = {
+    "ECART_COMMANDE_LIVRAISON": "ti-truck-delivery", "PRIX_INHABITUEL": "ti-tag", "TOTAL_INCOHERENT": "ti-calculator",
+    "DOUBLON_PROBABLE": "ti-copy", "CLIENT_INCONNU": "ti-user-question", "CLIENT_AMBIGU": "ti-users",
+    "ARTICLE_INCONNU": "ti-package-off", "QUANTITE_MANQUANTE": "ti-number", "QUANTITE_INVALIDE": "ti-ban",
+    "REMISE_A_VALIDER": "ti-discount", "INSTRUCTION_SUSPECTE": "ti-shield-x", "CALCUL_IMPOSSIBLE": "ti-alert-triangle",
+}
+modeles.env.globals.update(ICONES_CONTROLES=ICONES_CONTROLES)
+
+
 @app.get("/", response_class=HTMLResponse)
 async def accueil(request: Request):
     async def vue(request, c, u):
-        brouillons = []
-        for r in c.execute("SELECT id FROM dossiers WHERE statut = 'BROUILLON' ORDER BY id DESC LIMIT 30"):
-            d = S.dossier(c, r["id"])
-            cl = S.client(c, d["brouillon"]["client"].get("id"))
-            d["client_nom"] = cl["nom"] if cl else (d["brouillon"]["client"].get("nom_cite") or "Client à préciser")
-            d["bloquantes"] = sum(1 for a in d["anomalies"] if a["bloquante"] and not a["resolue"])
-            brouillons.append(d)
+        brouillons = _brouillons(c, 30)
         factures = [dict(r, contenu=json.loads(r["contenu"])) for r in
-                    c.execute("SELECT * FROM factures ORDER BY id DESC LIMIT 12")]
-        stats = {
-            "brouillons": len(brouillons),
-            "a_valider": sum(1 for d in brouillons if d["bloquantes"] == 0),
-            "confirmees": c.execute("SELECT COUNT(*) FROM factures WHERE statut='CONFIRMEE' AND type='FV'").fetchone()[0],
-            "ca": c.execute("SELECT COALESCE(SUM(CASE type WHEN 'FV' THEN total_ttc ELSE -total_ttc END),0) "
-                            "FROM factures WHERE statut='CONFIRMEE'").fetchone()[0],
-        }
-        return page(request, "accueil.html", c, u, brouillons=brouillons, factures=factures, stats=stats)
+                    c.execute("SELECT * FROM factures ORDER BY id DESC LIMIT 6")]
+        return page(request, "accueil.html", c, u, brouillons=brouillons, factures=factures,
+                    tb=S.tableau_de_bord(c), prets=[d for d in brouillons if not d["bloquantes"]])
+    return await avec_utilisateur(vue)(request)
+
+
+@app.get("/dossiers", response_class=HTMLResponse)
+async def dossiers(request: Request):
+    async def vue(request, c, u):
+        a_emettre = [dict(r, contenu=json.loads(r["contenu"])) for r in
+                     c.execute("SELECT * FROM factures WHERE statut IN ('VALIDEE','EN_ATTENTE_DGI') ORDER BY id")]
+        return page(request, "dossiers.html", c, u, brouillons=_brouillons(c, 100), a_emettre=a_emettre)
+    return await avec_utilisateur(vue)(request)
+
+
+@app.get("/recherche", response_class=HTMLResponse)
+async def recherche(request: Request, q: str = ""):
+    async def vue(request, c, u):
+        return page(request, "recherche.html", c, u, q=q, res=S.rechercher(c, q))
+    return await avec_utilisateur(vue)(request)
+
+
+@app.get("/aide", response_class=HTMLResponse)
+async def aide_page(request: Request):
+    async def vue(request, c, u):
+        return page(request, "aide.html", c, u, glossaire=AIDE)
     return await avec_utilisateur(vue)(request)
 
 
@@ -317,7 +363,9 @@ async def revue(request: Request, did: int):
                     client_choisi=S.client(c, br["client"].get("id")),
                     bloquantes=[a for a in d["anomalies"] if a["bloquante"] and not a["resolue"]],
                     proformas=[dict(r) for r in c.execute("SELECT * FROM proformas WHERE dossier_id = ?", (did,))],
-                    facture_id=facture_id)
+                    facture_id=facture_id,
+                    facture_statut=(c.execute("SELECT statut FROM factures WHERE id = ?", (facture_id,)).fetchone()
+                                    or [None])[0] if facture_id else None)
     return await avec_utilisateur(vue)(request)
 
 

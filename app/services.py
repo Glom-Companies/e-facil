@@ -676,6 +676,57 @@ def creer_proforma(conn, u: dict, did: int) -> int:
         return cur.lastrowid
 
 
+# --- Statistiques du tableau de bord ----------------------------------------------------------
+
+JOURS_COURTS = ["lun.", "mar.", "mer.", "jeu.", "ven.", "sam.", "dim."]
+
+
+def statistiques(conn, jours: int = 7, aujourd_hui: date | None = None) -> dict:
+    """Chiffres du tableau de bord : facturé par jour, encaissement, modes de paiement, garde-fous de l'IA.
+
+    Une facture annulée ne compte pas ; un avoir confirmé se déduit de sa facture.
+    """
+    fin = aujourd_hui or date.today()
+    debut = fin - timedelta(days=jours - 1)
+    par_jour = {(debut + timedelta(days=i)).isoformat(): 0 for i in range(jours)}
+    par_mode: dict[str, int] = {}
+    facture_net = 0
+    for r in conn.execute("SELECT type, statut, valide_le, total_ttc, net_a_payer, contenu FROM factures"
+                          " WHERE statut <> 'ANNULEE'"):
+        signe = -1 if r["type"] == "FA" else 1
+        jour = r["valide_le"][:10]
+        if jour in par_jour:
+            par_jour[jour] += signe * r["total_ttc"]
+        if r["statut"] == "CONFIRMEE":
+            facture_net += signe * r["net_a_payer"]
+            if r["type"] == "FV":
+                mode = json.loads(r["contenu"]).get("mode_paiement") or "AUTRE"
+                par_mode[mode] = par_mode.get(mode, 0) + r["net_a_payer"]
+    encaisse = conn.execute("SELECT COALESCE(SUM(montant), 0) FROM paiements").fetchone()[0]
+
+    lecteurs: dict[str, int] = {}
+    ia = {"valeurs_ecartees": 0, "consignes_suspectes": 0, "replis": 0, "dossiers": 0}
+    for r in conn.execute("SELECT extracteur, brouillon FROM dossiers WHERE statut <> 'SUPPRIME'"):
+        br = json.loads(r["brouillon"])
+        lecteurs[r["extracteur"]] = lecteurs.get(r["extracteur"], 0) + 1
+        ia["dossiers"] += 1
+        ia["valeurs_ecartees"] += len(br.get("rejets") or [])
+        ia["consignes_suspectes"] += 1 if br.get("instructions_suspectes") else 0
+        ia["replis"] += 1 if br.get("repli_ia") else 0
+
+    return {
+        "par_jour": [{"jour": j, "libelle": JOURS_COURTS[date.fromisoformat(j).weekday()] + " " + j[8:10],
+                      "montant": m} for j, m in par_jour.items()],
+        "max_jour": max([m for m in par_jour.values()] + [0]),
+        "total_periode": sum(par_jour.values()),
+        "encaissement": {"facture": facture_net, "encaisse": min(encaisse, max(facture_net, 0)),
+                         "reste": max(facture_net - encaisse, 0)},
+        "par_mode": sorted(par_mode.items(), key=lambda x: -x[1]),
+        "lecteurs": sorted(lecteurs.items(), key=lambda x: -x[1]),
+        "ia": ia,
+    }
+
+
 # --- Comptabilité ----------------------------------------------------------------------------
 
 def rapport_du_jour(conn, jour: date | None = None) -> dict:

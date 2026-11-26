@@ -84,3 +84,15 @@ def test_pages_admin(client):
     assert "Paramètres enregistrés" in r.text
     connecter(client, "aicha")
     assert "Votre rôle ne permet pas" in client.get("/parametres").text
+
+
+def test_liste_des_brouillons(client):
+    """La page des dossiers liste les brouillons, filtre par état et refuse un état inconnu sans erreur."""
+    connecter(client, "aicha")
+    page = client.get("/dossiers/nouveau").text
+    client.post("/dossiers/nouveau", data={"csrf": csrf(page), "canal": "SMS", "extracteur": "regles",
+                                           "texte_commande": "C'est Gbaguidi import. 10 sacs de farine."})
+    r = client.get("/dossiers")
+    assert r.status_code == 200 and "Gbaguidi" in r.text and "Brouillons" in r.text
+    assert client.get("/dossiers?etat=VALIDE").status_code == 200
+    assert client.get("/dossiers?etat=n_importe_quoi").status_code == 200

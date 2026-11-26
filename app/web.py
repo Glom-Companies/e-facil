@@ -16,9 +16,9 @@ from markupsafe import Markup, escape
 from starlette.middleware.sessions import SessionMiddleware
 
 from . import services as S
-from .brouillon import LIBELLES
+from .brouillon import LIBELLES, montants_par_ligne
 from .db import ecrire_parametre, lire_parametre, transaction, verifier_journal, journaliser
-from .extraction import EXTRACTEURS
+from .extraction import EXTRACTEURS, ia_disponibles
 from .moteur import format_fcfa
 from .pdf import LIBELLES_PAIEMENT, generer
 from .texte import localiser
@@ -96,7 +96,12 @@ def surligner(texte: str, citations: list[tuple[str, str]]) -> Markup:
 
 
 modeles.env.filters.update(fcfa=fcfa, date_fr=date_fr)
-modeles.env.globals.update(aide=aide, ROLES=ROLES, STATUTS=STATUTS, CANAUX=CANAUX, PAIEMENTS=LIBELLES_PAIEMENT,
+def version_css() -> str:
+    """Date de modification de la feuille de style : le navigateur la recharge dès qu'elle change."""
+    return str(int((RACINE / "app" / "static" / "app.css").stat().st_mtime))
+
+
+modeles.env.globals.update(version_css=version_css, aide=aide, ROLES=ROLES, STATUTS=STATUTS, CANAUX=CANAUX, PAIEMENTS=LIBELLES_PAIEMENT,
                            LIBELLES=LIBELLES, EXTRACTEURS=EXTRACTEURS)
 
 
@@ -139,6 +144,8 @@ def verifier_csrf(request: Request, jeton: str) -> None:
 
 
 def page(request: Request, nom: str, c, u, **ctx):
+    if u:
+        ctx.setdefault("nb_brouillons", c.execute("SELECT COUNT(*) FROM dossiers WHERE statut = 'BROUILLON'").fetchone()[0])
     ctx.update(request=request, u=u, csrf=jeton_csrf(request), entreprise=S.entreprise(c),
                flash=request.session.pop("flash", None), erreur=request.session.pop("erreur", None),
                idem=str(uuid.uuid4()))
@@ -232,13 +239,7 @@ def avec_utilisateur(fonction):
 @app.get("/", response_class=HTMLResponse)
 async def accueil(request: Request):
     async def vue(request, c, u):
-        brouillons = []
-        for r in c.execute("SELECT id FROM dossiers WHERE statut = 'BROUILLON' ORDER BY id DESC LIMIT 30"):
-            d = S.dossier(c, r["id"])
-            cl = S.client(c, d["brouillon"]["client"].get("id"))
-            d["client_nom"] = cl["nom"] if cl else (d["brouillon"]["client"].get("nom_cite") or "Client à préciser")
-            d["bloquantes"] = sum(1 for a in d["anomalies"] if a["bloquante"] and not a["resolue"])
-            brouillons.append(d)
+        brouillons = lister_dossiers(c, "BROUILLON", 30)
         factures = [dict(r, contenu=json.loads(r["contenu"])) for r in
                     c.execute("SELECT * FROM factures ORDER BY id DESC LIMIT 12")]
         stats = {
@@ -248,7 +249,38 @@ async def accueil(request: Request):
             "ca": c.execute("SELECT COALESCE(SUM(CASE type WHEN 'FV' THEN total_ttc ELSE -total_ttc END),0) "
                             "FROM factures WHERE statut='CONFIRMEE'").fetchone()[0],
         }
-        return page(request, "accueil.html", c, u, brouillons=brouillons, factures=factures, stats=stats)
+        return page(request, "accueil.html", c, u, brouillons=brouillons, factures=factures, stats=stats,
+                    st=S.statistiques(c))
+    return await avec_utilisateur(vue)(request)
+
+
+def lister_dossiers(c, etat: str | None, limite: int = 200) -> list[dict]:
+    """Dossiers de vente, du plus récent au plus ancien, avec le client et le nombre de blocages."""
+    if etat:
+        lignes = c.execute("SELECT id FROM dossiers WHERE statut = ? ORDER BY id DESC LIMIT ?", (etat, limite))
+    else:
+        lignes = c.execute("SELECT id FROM dossiers ORDER BY id DESC LIMIT ?", (limite,))
+    res = []
+    for r in lignes.fetchall():
+        d = S.dossier(c, r["id"])
+        cl = S.client(c, d["brouillon"]["client"].get("id"))
+        d["client_nom"] = cl["nom"] if cl else (d["brouillon"]["client"].get("nom_cite") or "Client à préciser")
+        d["bloquantes"] = sum(1 for a in d["anomalies"] if a["bloquante"] and not a["resolue"])
+        res.append(d)
+    return res
+
+
+ETATS_DOSSIER = {"BROUILLON": "À vérifier", "VALIDE": "Validés", "SUPPRIME": "Supprimés", "tous": "Tous"}
+
+
+@app.get("/dossiers", response_class=HTMLResponse)
+async def liste_dossiers(request: Request, etat: str = "BROUILLON"):
+    async def vue(request, c, u):
+        choisi = etat if etat in ETATS_DOSSIER else "BROUILLON"
+        comptes = {k: n for k, n in c.execute("SELECT statut, COUNT(*) FROM dossiers GROUP BY statut")}
+        comptes["tous"] = sum(comptes.values())
+        return page(request, "dossiers.html", c, u, dossiers=lister_dossiers(c, None if choisi == "tous" else choisi),
+                    etat=choisi, etats=ETATS_DOSSIER, comptes=comptes)
     return await avec_utilisateur(vue)(request)
 
 
@@ -261,7 +293,7 @@ EXEMPLES = json.loads((RACINE / "data" / "exemples.json").read_text(encoding="ut
 @app.get("/dossiers/nouveau", response_class=HTMLResponse)
 async def nouveau(request: Request):
     async def vue(request, c, u):
-        defaut = "gemini" if os.environ.get("GEMINI_API_KEY") else "regles"
+        defaut = (ia_disponibles() or ["regles"])[0]
         return page(request, "nouveau.html", c, u, exemples=EXEMPLES, extracteur_defaut=defaut)
     return await avec_utilisateur(vue)(request)
 
@@ -311,7 +343,9 @@ async def revue(request: Request, did: int):
         arts = S.articles(c)
         index = {a["id"]: a for a in arts}
         facture_id = d.get("facture_id")
+        montants = montants_par_ligne(br, arts) if d.get("totaux") else {}
         return page(request, "dossier.html", c, u, d=d, br=br, clients=S.clients(c), articles=arts, index=index,
+                    montants=montants,
                     source_commande=surligner(d["texte_commande"], cit_cmd),
                     source_livraison=surligner(d["texte_livraison"] or "", cit_bl),
                     client_choisi=S.client(c, br["client"].get("id")),
@@ -528,7 +562,7 @@ async def parametres(request: Request):
     async def vue(request, c, u):
         S.exiger(u, "parametres.ecrire")
         return page(request, "parametres.html", c, u, mode_solo=lire_parametre(c, "mode_solo", False),
-                    gemini=bool(os.environ.get("GEMINI_API_KEY")))
+                    gemini=bool(os.environ.get("GEMINI_API_KEY")), groq=bool(os.environ.get("GROQ_API_KEY")))
     return await avec_utilisateur(vue)(request)
 
 

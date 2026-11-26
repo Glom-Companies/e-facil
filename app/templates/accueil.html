@@ -1,16 +1,130 @@
 {% extends "base.html" %}
+{% from "_icones.html" import icone %}
 {% block titre %}Tableau de bord{% endblock %}
 {% block contenu %}
 <div class="entete-page">
   <div><h1>Tableau de bord</h1><p class="sous">Commandes à transformer en factures, et factures récentes.</p></div>
   {% if u.role in ('vendeur','responsable') %}<a class="btn btn-primary" href="/dossiers/nouveau">Nouvelle commande</a>{% endif %}
 </div>
-<div class="row g-3 mb-3">
-  <div class="col-6 col-lg-3"><div class="kpi"><div class="lib">Brouillons en cours</div><div class="val">{{ stats.brouillons }}</div></div></div>
-  <div class="col-6 col-lg-3"><div class="kpi"><div class="lib">Prêts à valider</div><div class="val">{{ stats.a_valider }}</div></div></div>
-  <div class="col-6 col-lg-3"><div class="kpi"><div class="lib">Factures confirmées</div><div class="val">{{ stats.confirmees }}</div></div></div>
-  <div class="col-6 col-lg-3"><div class="kpi"><div class="lib">Chiffre facturé (TTC, avoirs déduits)</div><div class="val">{{ stats.ca|fcfa }}</div></div></div>
+<div class="cartes-stat mb-3">
+  <a class="carte-stat" href="/dossiers">
+    <span class="rond">{{ icone('brouillon', 26) }}</span>
+    <span><span class="lib">Brouillons en cours</span><span class="val">{{ stats.brouillons }}</span></span>
+  </a>
+  <a class="carte-stat" href="/dossiers">
+    <span class="rond">{{ icone('coche', 26) }}</span>
+    <span><span class="lib">Prêts à valider</span><span class="val">{{ stats.a_valider }}</span></span>
+  </a>
+  <a class="carte-stat" href="/factures">
+    <span class="rond">{{ icone('facture-ok', 26) }}</span>
+    <span><span class="lib">Factures confirmées</span><span class="val">{{ stats.confirmees }}</span></span>
+  </a>
+  <a class="carte-stat" href="/factures" title="Factures confirmées par la DGI simulée, taxes comprises, avoirs déduits">
+    <span class="rond">{{ icone('argent', 26) }}</span>
+    <span><span class="lib">Chiffre facturé TTC</span><span class="val">{{ stats.ca|fcfa }}</span></span>
+  </a>
 </div>
+{% set couleur_lecteur = {'gemini': 'var(--serie-1)', 'groq': 'var(--serie-2)', 'regles': 'var(--serie-3)', 'ollama': 'var(--serie-4)'} %}
+<div class="row g-3 mb-3">
+  <!-- Facturé par jour -->
+  <div class="col-xl-7">
+    <div class="card h-100">
+      <div class="card-header">
+        <div><h2 class="card-title">Facturé par jour</h2><p class="small text-secondary mb-0">Factures validées, émises ou non · TTC, avoirs déduits · 7 jours</p></div>
+        <div class="ms-auto text-end"><span class="graph-total">{{ st.total_periode|fcfa }}</span><span class="d-block small text-secondary">sur la période</span></div>
+      </div>
+      <div class="card-body">
+        {% set maxi = st.max_jour if st.max_jour > 0 else 1 %}
+        <div class="graph-colonnes" role="img" aria-label="Montant facturé par jour sur 7 jours, total {{ st.total_periode|fcfa }}">
+          <div class="graph-axe"><span>{{ st.max_jour|fcfa if st.max_jour else '' }}</span><span>0 F</span></div>
+          <div class="graph-zone">
+            <div class="graph-grille"></div>
+            {% for j in st.par_jour %}
+            {% set h = (j.montant / maxi * 100) if j.montant > 0 else 0 %}
+            <div class="graph-col" tabindex="0" aria-label="{{ j.libelle }} : {{ j.montant|fcfa }}" data-tip="{{ j.libelle }} · {{ j.montant|fcfa }}">
+              {% if j.montant > 0 and (j.montant == st.max_jour or loop.last) %}<span class="graph-valeur{% if loop.last %} fin{% endif %}" style="bottom:calc({{ h }}% + 4px)">{{ j.montant|fcfa }}</span>{% endif %}
+              <span class="graph-barre" style="height:{{ h }}%"></span>
+            </div>
+            {% endfor %}
+          </div>
+          <div></div>
+          <div class="graph-jours">{% for j in st.par_jour %}<span><span class="jour-nom">{{ j.libelle[:-3] }} </span>{{ j.libelle[-2:] }}</span>{% endfor %}</div>
+        </div>
+        <details class="graph-donnees"><summary>Voir les données</summary>
+          <table class="table table-sm mb-0"><thead><tr><th>Jour</th><th class="num">Facturé TTC</th></tr></thead>
+            <tbody>{% for j in st.par_jour %}<tr><td>{{ j.libelle }}</td><td class="num">{{ j.montant|fcfa }}</td></tr>{% endfor %}</tbody></table>
+        </details>
+      </div>
+    </div>
+  </div>
+
+  <!-- Encaissement et modes de paiement -->
+  <div class="col-xl-5">
+    <div class="card h-100">
+      <div class="card-header"><h2 class="card-title">Encaissement</h2></div>
+      <div class="card-body">
+        {% set e = st.encaissement %}
+        {% if e.facture > 0 %}
+        {% set pct = (e.encaisse / e.facture * 100)|round(0)|int %}
+        <p class="mb-1 small text-secondary">Reste à encaisser</p>
+        <p class="graph-heros">{{ e.reste|fcfa }}</p>
+        <div class="graph-segments" role="img" aria-label="Encaissé {{ e.encaisse|fcfa }} sur {{ e.facture|fcfa }} facturés et émis">
+          {% if e.encaisse > 0 %}<span class="seg" style="flex:{{ e.encaisse }};background:var(--encaisse)" tabindex="0" data-tip="Encaissé · {{ e.encaisse|fcfa }} ({{ pct }} %)"></span>{% endif %}
+          {% if e.reste > 0 %}<span class="seg" style="flex:{{ e.reste }};background:var(--a-encaisser)" tabindex="0" data-tip="À encaisser · {{ e.reste|fcfa }} ({{ 100 - pct }} %)"></span>{% endif %}
+        </div>
+        <ul class="graph-legende">
+          <li><i style="background:var(--encaisse)"></i>Encaissé <strong>{{ e.encaisse|fcfa }}</strong> <span>{{ pct }} %</span></li>
+          <li><i style="background:var(--a-encaisser)"></i>À encaisser <strong>{{ e.reste|fcfa }}</strong> <span>{{ 100 - pct }} %</span></li>
+        </ul>
+        <p class="small text-secondary mb-3">Sur {{ e.facture|fcfa }} de factures émises (net à payer, avoirs déduits). Paiements simulés.</p>
+        {% else %}
+        <p class="text-secondary">Aucune facture émise pour l'instant.</p>
+        {% endif %}
+
+        <h3 class="graph-sous-titre">Par mode de paiement</h3>
+        {% if st.par_mode %}
+        {% set maxm = st.par_mode[0][1] if st.par_mode[0][1] > 0 else 1 %}
+        <div class="graph-barres-h">
+          {% for mode, montant in st.par_mode %}
+          <div class="ligne-h" tabindex="0" data-tip="{{ PAIEMENTS.get(mode, mode) }} · {{ montant|fcfa }}">
+            <span class="nom">{{ PAIEMENTS.get(mode, mode) }}</span>
+            <span class="piste"><span class="barre-h" style="width:{{ montant / maxm * 100 }}%"></span><span class="val">{{ montant|fcfa }}</span></span>
+          </div>
+          {% endfor %}
+        </div>
+        {% else %}<p class="small text-secondary mb-0">Apparaîtra après la première facture émise.</p>{% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Garde-fous de l'IA -->
+<div class="card mb-3">
+  <div class="card-header">
+    <div><h2 class="card-title">L'IA lit, le code vérifie, l'humain décide</h2><p class="small text-secondary mb-0">Ce que les garde-fous ont intercepté sur {{ st.ia.dossiers }} dossier(s)</p></div>
+  </div>
+  <div class="card-body">
+    <div class="row g-3 align-items-stretch">
+      <div class="col-6 col-lg-3"><div class="tuile-ia"><span class="val">{{ st.ia.valeurs_ecartees }}</span><span class="lib">valeur(s) écartée(s) : citation absente du message</span></div></div>
+      <div class="col-6 col-lg-3"><div class="tuile-ia"><span class="val">{{ st.ia.consignes_suspectes }}</span><span class="lib">message(s) avec une consigne suspecte, ignorée et signalée</span></div></div>
+      <div class="col-6 col-lg-3"><div class="tuile-ia"><span class="val">{{ st.ia.replis }}</span><span class="lib">repli(s) automatique(s) quand une IA était indisponible</span></div></div>
+      <div class="col-6 col-lg-3">
+        <div class="tuile-ia">
+          <span class="lib mb-2">Messages lus par</span>
+          {% if st.lecteurs %}
+          <div class="graph-segments fin" role="img" aria-label="Répartition des lectures">
+            {% for nom, n in st.lecteurs %}<span class="seg" style="flex:{{ n }};background:{{ couleur_lecteur.get(nom, 'var(--serie-4)') }}" tabindex="0" data-tip="{{ EXTRACTEURS.get(nom, nom) }} · {{ n }}"></span>{% endfor %}
+          </div>
+          <ul class="graph-legende compacte">
+            {% for nom, n in st.lecteurs %}<li><i style="background:{{ couleur_lecteur.get(nom, 'var(--serie-4)') }}"></i>{{ EXTRACTEURS.get(nom, nom) }} <strong>{{ n }}</strong></li>{% endfor %}
+          </ul>
+          {% else %}<span class="small text-secondary">Aucun message lu.</span>{% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="row g-3">
   <div class="col-lg-7">
     <div class="card">

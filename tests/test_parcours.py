@@ -217,3 +217,20 @@ def test_paiement_et_rapport(conn):
     r = S.rapport_du_jour(conn)
     assert r["par_type"]["FV"]["ttc"] == 207_500
     assert "411" in S.export_ecritures_csv(conn)
+
+
+def test_statistiques_tableau_de_bord(conn):
+    """Facturé par jour, encaissement et garde-fous : une facture émise et payée en partie."""
+    from datetime import date
+    resp = u(conn, "rodrigue")
+    did = dossier_pret(conn)
+    fid = S.valider(conn, resp, did, version(conn, did))
+    S.emettre(conn, resp, fid)
+    S.enregistrer_paiement(conn, resp, fid, 50000, "MOBILEMONEY", "MM-TEST-0001")
+    f = S.facture(conn, fid)
+    st = S.statistiques(conn, jours=7, aujourd_hui=date.today())
+    assert len(st["par_jour"]) == 7 and st["par_jour"][-1]["montant"] == f["total_ttc"]
+    assert st["max_jour"] == f["total_ttc"] and st["total_periode"] == f["total_ttc"]
+    assert st["encaissement"] == {"facture": f["net_a_payer"], "encaisse": 50000, "reste": f["net_a_payer"] - 50000}
+    assert st["par_mode"] == [("MOBILEMONEY", f["net_a_payer"])]
+    assert st["lecteurs"] == [("regles", 1)] and st["ia"]["dossiers"] == 1

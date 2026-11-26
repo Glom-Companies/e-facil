@@ -1,60 +1,88 @@
 <!doctype html>
+{% from "_icones.html" import icone %}
 <html lang="fr">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block titre %}Facturation{% endblock %} · {{ entreprise.raison_sociale or "Facturation PME" }}</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/core@1.0.0-beta20/dist/css/tabler.min.css">
-  <link rel="stylesheet" href="/static/app.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource-variable/inter@5/index.css">
+  <link rel="stylesheet" href="/static/app.css?v={{ version_css() }}">
 </head>
 <body>
-<div class="bandeau-simulation">Prototype de démonstration · données fictives · émission DGI simulée</div>
 {% if u %}
-<header class="navbar navbar-expand-md d-print-none barre">
-  <div class="container-xl">
-    <button class="navbar-toggler" type="button" aria-label="Menu" onclick="document.getElementById('menu').classList.toggle('show')">
-      <span class="navbar-toggler-icon"></span>
-    </button>
-    <a href="/" class="navbar-brand marque">
-      <span class="marque-carre" aria-hidden="true">F</span>
-      <span><strong>{{ entreprise.raison_sociale }}</strong><small>e-FACIL · facturation</small></span>
+{% set p = request.url.path %}
+<div class="coque">
+  <aside class="lateral" id="menu" aria-label="Menu principal">
+    <a href="/" class="logo">
+      <span class="logo-marque" aria-hidden="true">e</span>
+      <span>e-FACIL<small>{{ entreprise.raison_sociale }}</small></span>
     </a>
-    <div class="navbar-nav flex-row order-md-last">
-      <div class="profil">
-        <span class="avatar avatar-sm">{{ u.nom[:1] }}</span>
-        <span class="d-none d-sm-inline"><strong>{{ u.nom }}</strong><small>{{ ROLES[u.role] }}{% if u.mode_solo %} · solo{% endif %}</small></span>
-        <form method="post" action="/deconnexion"><button class="btn btn-ghost-secondary btn-sm" type="submit">Quitter</button></form>
-      </div>
-    </div>
-    <nav class="collapse navbar-collapse" id="menu">
-      <ul class="navbar-nav">
-        {% set p = request.url.path %}
-        <li class="nav-item {% if p == '/' %}active{% endif %}"><a class="nav-link" href="/">Tableau de bord</a></li>
-        {% if u.role in ('vendeur', 'responsable') %}
-        <li class="nav-item {% if p.startswith('/dossiers') %}active{% endif %}"><a class="nav-link" href="/dossiers/nouveau">Nouvelle commande</a></li>
-        {% endif %}
-        <li class="nav-item {% if p.startswith('/factures') %}active{% endif %}"><a class="nav-link" href="/factures">Factures</a></li>
-        {% if u.role in ('comptable', 'responsable', 'admin') %}
-        <li class="nav-item {% if p.startswith('/comptabilite') %}active{% endif %}"><a class="nav-link" href="/comptabilite">Comptabilité</a></li>
-        {% endif %}
-        <li class="nav-item {% if p.startswith('/referentiels') %}active{% endif %}"><a class="nav-link" href="/referentiels">Clients et articles</a></li>
-        <li class="nav-item {% if p.startswith('/journal') %}active{% endif %}"><a class="nav-link" href="/journal">Journal</a></li>
-        {% if u.role == 'admin' %}
-        <li class="nav-item {% if p.startswith('/parametres') %}active{% endif %}"><a class="nav-link" href="/parametres">Paramètres</a></li>
-        {% endif %}
-      </ul>
+    <nav class="nav-lat">
+      <a class="nav-lien {% if p == '/' %}actif{% endif %}" href="/">{{ icone('tableau') }}<span>Tableau de bord</span></a>
+
+      <details class="nav-groupe" {% if p.startswith('/dossiers') or p.startswith('/factures') or p.startswith('/referentiels') %}open{% endif %}>
+        <summary class="nav-lien {% if p.startswith('/dossiers') or p.startswith('/factures') or p.startswith('/referentiels') %}groupe-actif{% endif %}">
+          {{ icone('facture') }}<span>Facturation</span>{{ icone('bas', 16) }}</summary>
+        <div class="nav-sous">
+          {% if u.role in ('vendeur', 'responsable') %}
+          <a class="{% if p == '/dossiers/nouveau' %}actif{% endif %}" href="/dossiers/nouveau">Nouvelle commande</a>
+          {% endif %}
+          <a class="{% if p.startswith('/dossiers') and p != '/dossiers/nouveau' %}actif{% endif %}" href="/dossiers">Brouillons{% if nb_brouillons %} <span class="compteur">{{ nb_brouillons }}</span>{% endif %}</a>
+          <a class="{% if p.startswith('/factures') %}actif{% endif %}" href="/factures">Factures et avoirs</a>
+          <a class="{% if p.startswith('/referentiels') %}actif{% endif %}" href="/referentiels">Clients et articles</a>
+        </div>
+      </details>
+
+      <details class="nav-groupe" {% if p.startswith('/comptabilite') or p.startswith('/journal') or p.startswith('/parametres') %}open{% endif %}>
+        <summary class="nav-lien {% if p.startswith('/comptabilite') or p.startswith('/journal') or p.startswith('/parametres') %}groupe-actif{% endif %}">
+          {{ icone('gestion') }}<span>Gestion</span>{{ icone('bas', 16) }}</summary>
+        <div class="nav-sous">
+          {% if u.role in ('comptable', 'responsable', 'admin') %}
+          <a class="{% if p.startswith('/comptabilite') %}actif{% endif %}" href="/comptabilite">Comptabilité</a>
+          {% endif %}
+          <a class="{% if p.startswith('/journal') %}actif{% endif %}" href="/journal">Journal d'audit</a>
+          {% if u.role == 'admin' %}
+          <a class="{% if p.startswith('/parametres') %}actif{% endif %}" href="/parametres">Paramètres</a>
+          {% endif %}
+        </div>
+      </details>
     </nav>
+    <div class="lateral-bas">
+      <p class="mention-simu">{{ icone('alerte', 16) }}<span>Prototype : données fictives, émission DGI simulée. Aucune valeur fiscale.</span></p>
+      <form method="post" action="/deconnexion"><button class="nav-lien" type="submit">{{ icone('sortie') }}<span>Se déconnecter</span></button></form>
+    </div>
+  </aside>
+  <div class="voile" onclick="document.body.classList.remove('menu-ouvert')"></div>
+
+  <div class="principal">
+    <header class="haut">
+      <button class="bouton-menu" type="button" aria-label="Ouvrir le menu" onclick="document.body.classList.toggle('menu-ouvert')">{{ icone('menu') }}</button>
+      {% block retour %}{% endblock %}
+      <p class="haut-titre">{% block titre_haut %}{{ self.titre() }}{% endblock %}</p>
+      <span class="pastille-simu">Simulation</span>
+      <div class="profil">
+        <span class="avatar-rond" aria-hidden="true">{{ u.nom[:1] }}</span>
+        <span class="d-none d-sm-block"><strong>{{ u.nom }}</strong><small>{{ ROLES[u.role] }}{% if u.mode_solo %} · solo{% endif %}</small></span>
+      </div>
+    </header>
+    <main class="contenu">
+      {% if flash %}<div class="alert alert-success" role="status">{{ flash }}</div>{% endif %}
+      {% if erreur %}<div class="alert alert-danger" role="alert">{{ erreur }}</div>{% endif %}
+      {% block contenu %}{% endblock %}
+    </main>
+    <footer class="pied"><strong>e-FACIL</strong> par l'équipe BillGenius · prototype BWAI'2026, cas 2 · Les factures produites n'ont aucune valeur fiscale.</footer>
   </div>
-</header>
-{% endif %}
-<main class="page-body">
-  <div class="container-xl">
-    {% if flash %}<div class="alert alert-success" role="status">{{ flash }}</div>{% endif %}
-    {% if erreur %}<div class="alert alert-danger" role="alert">{{ erreur }}</div>{% endif %}
-    {% block contenu %}{% endblock %}
-  </div>
+</div>
+{% else %}
+<div class="bandeau-simulation">Prototype de démonstration · données fictives · émission DGI simulée</div>
+<main class="contenu contenu-seul">
+  {% if flash %}<div class="alert alert-success" role="status">{{ flash }}</div>{% endif %}
+  {% if erreur %}<div class="alert alert-danger" role="alert">{{ erreur }}</div>{% endif %}
+  {% block contenu_public %}{{ self.contenu() }}{% endblock %}
 </main>
-<footer class="pied"><strong>e-FACIL</strong> par l'équipe BillGenius · prototype hackathon BWAI'2026, cas 2 · Les factures produites n'ont aucune valeur fiscale.</footer>
+<footer class="pied"><strong>e-FACIL</strong> par l'équipe BillGenius · prototype BWAI'2026, cas 2 · Les factures produites n'ont aucune valeur fiscale.</footer>
+{% endif %}
 {% block scripts %}{% endblock %}
 </body>
 </html>

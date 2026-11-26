@@ -46,6 +46,12 @@
       <div class="card-header"><h2 class="card-title">Démonstration</h2></div>
       <div class="card-body">
         <p class="small text-secondary">Efface tous les dossiers, factures et le journal, puis recharge les clients et articles fictifs.</p>
+        <form method="post" action="/parametres/demo" class="mb-3" onsubmit="return document.getElementById('conf-demo').checked">
+          <input type="hidden" name="csrf" value="{{ csrf }}">
+          <p class="small mb-2">Ou repartir d'un jeu de démonstration complet : 5 factures émises sur les 5 derniers jours, des paiements, et 5 commandes du jour à vérifier.</p>
+          <label class="form-check mb-2"><input class="form-check-input" type="checkbox" id="conf-demo"> <span class="form-check-label small">Je confirme vouloir tout effacer</span></label>
+          <button class="btn btn-primary" type="submit">Charger la démonstration</button>
+        </form>
         <form method="post" action="/parametres/reinitialiser" onsubmit="return document.getElementById('conf-reinit').checked">
           <input type="hidden" name="csrf" value="{{ csrf }}">
           <label class="form-check mb-2"><input class="form-check-input" type="checkbox" id="conf-reinit"> <span class="form-check-label small">Je confirme vouloir tout effacer</span></label>

@@ -57,6 +57,8 @@ En option, un modèle local avec Ollama : `ollama pull qwen2.5:7b`, puis choisis
 
 ## Scénario de démonstration (5 minutes)
 
+**Jeu de démonstration.** Pour repartir d'une base réaliste (5 factures émises sur les 5 derniers jours, des paiements, 5 commandes du jour à vérifier) : `python -m app.demo`, ou, connecté en `admin`, « Paramètres » puis « Charger la démonstration ». La lecture se fait par règles simples : le résultat est identique à chaque fois et ne consomme aucun quota d'IA.
+
 1. **Aïcha** (vendeuse) : « Nouvelle commande », exemple « Dossou : livraison partielle », puis « Lire la commande ».
    - Écran de revue : passages surlignés, client reconnu, quantités citées, AIB de 1 %.
    - Contrôle bloquant : 12 commandés, 10 livrés. Aïcha ne peut pas valider.

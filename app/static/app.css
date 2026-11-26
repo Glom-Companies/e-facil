@@ -338,3 +338,30 @@ details.card[open]>summary.card-header{border-radius:var(--rayon) var(--rayon) 0
 .carte-stat .note{display:block;color:var(--gris-clair);font-size:.72rem;margin-top:.1rem}
 @media (max-width:1399px){.cartes-stat{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media (max-width:575px){.cartes-stat{grid-template-columns:1fr;gap:.75rem}.carte-stat{padding:1rem}.carte-stat .rond{width:50px;height:50px}}
+
+/* --- Recherche et aide --------------------------------------------------------------- */
+.recherche-haut{display:flex;align-items:center;gap:.5rem;background:var(--panneau);border:1px solid var(--trait);border-radius:10px;padding:.35rem .7rem;color:var(--gris);width:min(320px,30vw)}
+.recherche-haut input{border:0;background:none;outline:none;width:100%;font-size:.88rem;color:var(--encre)}
+.recherche-haut:focus-within{border-color:var(--vert);box-shadow:0 0 0 3px rgba(22,165,122,.15)}
+@media (max-width:767px){.recherche-haut{display:none}}
+.recherche-grande{display:flex;align-items:center;gap:.6rem;background:#fff;border:1px solid var(--trait);border-radius:var(--rayon);padding:.5rem .6rem .5rem 1rem;color:var(--gris);box-shadow:var(--ombre);max-width:720px}
+.recherche-grande .form-control{border:0;box-shadow:none;padding-left:0}
+.compteur-neutre{font-size:.75rem;font-weight:600;background:var(--panneau);color:var(--gris);border-radius:999px;padding:.1rem .5rem;margin-left:.35rem}
+.liste-res{list-style:none;margin:0;padding:0}
+.liste-res li+li{border-top:1px solid var(--trait)}
+.liste-res a{display:flex;align-items:center;gap:.85rem;padding:.85rem 1.25rem;color:var(--encre);text-decoration:none}
+.liste-res a:hover{background:var(--panneau)}
+.liste-res .corps{flex:1;min-width:0}
+.liste-res .titre{display:block;font-weight:600}
+.liste-res .sous{display:block;color:var(--gris);font-size:.82rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.liste-res .droite{display:flex;flex-direction:column;align-items:flex-end;gap:.25rem}
+.liste-res .montant{font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap}
+.rond-petit{width:38px;height:38px;border-radius:50%;background:var(--vert-pale);color:var(--vert);display:grid;place-items:center;flex:none}
+.etapes-aide{list-style:none;margin:0;padding:.5rem 1.25rem 1rem}
+.etapes-aide li{display:flex;gap:.9rem;padding:.85rem 0}
+.etapes-aide li+li{border-top:1px solid var(--trait)}
+.etapes-aide p{margin:.2rem 0 0;color:var(--gris);font-size:.9rem}
+.glossaire dt{font-weight:600;margin-top:.75rem}
+.glossaire dt:first-child{margin-top:0}
+.glossaire dd{color:var(--gris);margin:0 0 .25rem;font-size:.9rem}
+.table .mono,.table td:first-child a{white-space:nowrap}

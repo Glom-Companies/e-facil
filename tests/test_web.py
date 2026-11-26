@@ -96,3 +96,14 @@ def test_liste_des_brouillons(client):
     assert r.status_code == 200 and "Gbaguidi" in r.text and "Brouillons" in r.text
     assert client.get("/dossiers?etat=VALIDE").status_code == 200
     assert client.get("/dossiers?etat=n_importe_quoi").status_code == 200
+
+
+def test_recherche_aide_et_demo(client):
+    connecter(client, "aicha")
+    assert client.get("/recherche?q=Dossou").status_code == 200
+    assert "Les mots de la facture" in client.get("/aide").text
+    r = client.post("/parametres/demo", data={"csrf": csrf(client.get("/dossiers/nouveau").text)})
+    assert "Votre rôle ne permet pas" in r.text
+    connecter(client, "admin")
+    r = client.post("/parametres/demo", data={"csrf": csrf(client.get("/parametres").text)})
+    assert "Démonstration chargée : 5 factures émises, 5 commandes à vérifier." in r.text

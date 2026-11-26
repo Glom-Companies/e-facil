@@ -50,6 +50,7 @@
     </nav>
     <div class="lateral-bas">
       <p class="mention-simu">{{ icone('alerte', 16) }}<span>Prototype : données fictives, émission DGI simulée. Aucune valeur fiscale.</span></p>
+      <a class="nav-lien {% if p == '/aide' %}actif{% endif %}" href="/aide">{{ icone('aide') }}<span>Aide</span></a>
       <form method="post" action="/deconnexion"><button class="nav-lien" type="submit">{{ icone('sortie') }}<span>Se déconnecter</span></button></form>
     </div>
   </aside>
@@ -60,6 +61,9 @@
       <button class="bouton-menu" type="button" aria-label="Ouvrir le menu" onclick="document.body.classList.toggle('menu-ouvert')">{{ icone('menu') }}</button>
       {% block retour %}{% endblock %}
       <p class="haut-titre">{% block titre_haut %}{{ self.titre() }}{% endblock %}</p>
+      <form class="recherche-haut" method="get" action="/recherche" role="search">
+        {{ icone('loupe', 18) }}<input type="search" name="q" placeholder="Rechercher un client, une facture…" aria-label="Rechercher" value="{{ request.query_params.get('q', '') if p == '/recherche' else '' }}">
+      </form>
       <span class="pastille-simu">Simulation</span>
       <div class="profil">
         <span class="avatar-rond" aria-hidden="true">{{ u.nom[:1] }}</span>

@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% from "_icones.html" import icone %}
+{% block titre %}Recherche{% endblock %}
+{% block contenu %}
+<div class="entete-page">
+  <div><h1>Recherche{% if q %} : « {{ q }} »{% endif %}</h1>
+    <p class="sous">Par client, numéro de facture, code DGI, numéro de dossier ou mot du message.</p></div>
+</div>
+<form class="recherche-grande mb-4" method="get" action="/recherche" role="search">
+  {{ icone('loupe', 20) }}<input class="form-control" type="search" name="q" value="{{ q }}" placeholder="Ex. Dossou, FV-2026-000002, SIMU-…, riz" aria-label="Rechercher" autofocus>
+  <button class="btn btn-primary" type="submit">Rechercher</button>
+</form>
+{% if q|length < 2 %}
+<div class="card"><p class="vide mb-0">Saisissez au moins deux caractères.</p></div>
+{% else %}
+<div class="row g-4">
+  <div class="col-lg-6">
+    <div class="card h-100">
+      <div class="card-header"><h2 class="card-title">Factures et avoirs <span class="compteur-neutre">{{ res.factures|length }}</span></h2></div>
+      <ul class="liste-res">
+        {% for f in res.factures %}
+        <li><a href="/factures/{{ f.id }}">
+          <span class="rond-petit">{{ icone('facture-ok', 18) }}</span>
+          <span class="corps"><span class="titre mono">{{ f.numero }}</span><span class="sous">{{ f.contenu.client.nom }} · {{ f.valide_le|date_fr }}</span></span>
+          <span class="droite"><span class="montant">{% if f.type == 'FA' %}− {% endif %}{{ f.total_ttc|fcfa }}</span><span class="etat etat-{{ f.statut }}">{{ STATUTS[f.statut] }}</span></span>
+        </a></li>
+        {% else %}<li class="vide">Aucune facture.</li>{% endfor %}
+      </ul>
+    </div>
+  </div>
+  <div class="col-lg-6">
+    <div class="card h-100">
+      <div class="card-header"><h2 class="card-title">Dossiers de vente <span class="compteur-neutre">{{ res.dossiers|length }}</span></h2></div>
+      <ul class="liste-res">
+        {% for d in res.dossiers %}
+        <li><a href="/dossiers/{{ d.id }}">
+          <span class="rond-petit">{{ icone('brouillon', 18) }}</span>
+          <span class="corps"><span class="titre">{{ d.client or 'Client à préciser' }}</span><span class="sous">Dossier {{ d.id }} · {{ CANAUX.get(d.canal, d.canal) }} · {{ d.cree_le|date_fr }}</span></span>
+          <span class="droite"><span class="etat etat-{{ d.statut }}">{{ STATUTS[d.statut] }}</span></span>
+        </a></li>
+        {% else %}<li class="vide">Aucun dossier.</li>{% endfor %}
+      </ul>
+    </div>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

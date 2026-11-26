@@ -676,6 +676,37 @@ def creer_proforma(conn, u: dict, did: int) -> int:
         return cur.lastrowid
 
 
+# --- Recherche (d'après Livingstone Othniel, branche dev_othniel_design) ----------------------
+
+def rechercher(conn, q: str) -> dict:
+    """Factures (numéro, client, code DGI) et dossiers (client, n° de dossier, texte du message)."""
+    q = (q or "").strip()
+    if len(q) < 2:
+        return {"dossiers": [], "factures": []}
+    motif = f"%{q}%"
+    ids_clients = [c["id"] for c in clients(conn) if B.normaliser(q) in B.normaliser(c["nom"] + " " + " ".join(c["alias"]))]
+
+    def resume(r) -> dict:
+        br = json.loads(r["brouillon"])
+        return {"id": r["id"], "statut": r["statut"], "cree_le": r["cree_le"], "canal": r["canal"],
+                "client": (client(conn, br["client"].get("id")) or {}).get("nom") or br["client"].get("nom_cite")}
+
+    dossiers = []
+    for r in conn.execute("SELECT id, brouillon, statut, cree_le, canal FROM dossiers WHERE statut != 'SUPPRIME' "
+                          "ORDER BY id DESC LIMIT 200").fetchall():
+        br = json.loads(r["brouillon"])
+        if br["client"].get("id") in ids_clients or str(r["id"]) == q.lstrip("#"):
+            dossiers.append(resume(r))
+    for r in conn.execute("SELECT id, statut, cree_le, canal, brouillon FROM dossiers WHERE statut != 'SUPPRIME' "
+                          "AND texte_commande LIKE ? ORDER BY id DESC LIMIT 20", (motif,)).fetchall():
+        if not any(d["id"] == r["id"] for d in dossiers):
+            dossiers.append(resume(r))
+    factures = [dict(r, contenu=json.loads(r["contenu"])) for r in conn.execute(
+        "SELECT * FROM factures WHERE numero LIKE ? OR contenu LIKE ? OR code_dgi LIKE ? ORDER BY id DESC LIMIT 50",
+        (motif, f'%"nom": "%{q}%', motif))]
+    return {"dossiers": dossiers[:30], "factures": factures}
+
+
 # --- Statistiques du tableau de bord ----------------------------------------------------------
 
 JOURS_COURTS = ["lun.", "mar.", "mer.", "jeu.", "ven.", "sam.", "dim."]

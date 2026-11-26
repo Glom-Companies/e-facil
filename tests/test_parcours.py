@@ -234,3 +234,28 @@ def test_statistiques_tableau_de_bord(conn):
     assert st["encaissement"] == {"facture": f["net_a_payer"], "encaisse": 50000, "reste": f["net_a_payer"] - 50000}
     assert st["par_mode"] == [("MOBILEMONEY", f["net_a_payer"])]
     assert st["lecteurs"] == [("regles", 1)] and st["ia"]["dossiers"] == 1
+
+
+def test_jeu_de_demonstration(conn):
+    """5 factures émises sur 5 jours distincts, journal intègre, 5 commandes à vérifier, rejouable à l'identique."""
+    from app import demo
+    assert demo.charger(conn) == {"factures": 5, "a_verifier": 5}
+    jours = {r[0][:10] for r in conn.execute("SELECT valide_le FROM factures")}
+    assert len(jours) == 5
+    assert all(r[0] == "CONFIRMEE" for r in conn.execute("SELECT statut FROM factures"))
+    assert verifier_journal(conn)[0]
+    totaux = [r[0] for r in conn.execute("SELECT total_ttc FROM factures ORDER BY id")]
+    demo.charger(conn)
+    assert [r[0] for r in conn.execute("SELECT total_ttc FROM factures ORDER BY id")] == totaux
+    from app.db import maintenant
+    assert maintenant()[:10] == __import__("datetime").date.today().isoformat()  # horloge rétablie
+
+
+def test_recherche(conn):
+    from app import demo
+    demo.charger(conn)
+    assert S.rechercher(conn, "x")["factures"] == []  # moins de deux caractères
+    r = S.rechercher(conn, "Houngbédji")
+    assert r["factures"] and r["factures"][0]["contenu"]["client"]["nom"].startswith("Supermarché Houngbédji")
+    assert S.rechercher(conn, "FV-2026-000003")["factures"][0]["numero"] == "FV-2026-000003"
+    assert any(d["client"] == "Ets Dossou et Frères" for d in S.rechercher(conn, "Dossou")["dossiers"])

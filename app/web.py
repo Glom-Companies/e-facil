@@ -270,6 +270,20 @@ def lister_dossiers(c, etat: str | None, limite: int = 200) -> list[dict]:
     return res
 
 
+@app.get("/recherche", response_class=HTMLResponse)
+async def recherche(request: Request, q: str = ""):
+    async def vue(request, c, u):
+        return page(request, "recherche.html", c, u, q=q, res=S.rechercher(c, q))
+    return await avec_utilisateur(vue)(request)
+
+
+@app.get("/aide", response_class=HTMLResponse)
+async def aide_page(request: Request):
+    async def vue(request, c, u):
+        return page(request, "aide.html", c, u, glossaire=AIDE)
+    return await avec_utilisateur(vue)(request)
+
+
 ETATS_DOSSIER = {"BROUILLON": "À vérifier", "VALIDE": "Validés", "SUPPRIME": "Supprimés", "tous": "Tous"}
 
 
@@ -591,6 +605,18 @@ async def parametres_post(request: Request):
             journaliser(c, u["id"], "PARAMETRES_MODIFIES", "entreprise",
                         {k: v for k, v in perso.items() if k != "logo"} | {"mode_solo": bool(form.get("mode_solo"))})
     return await action(request, "/parametres", "/parametres", f, "Paramètres enregistrés.")
+
+
+@app.post("/parametres/demo")
+async def charger_demo(request: Request):
+    async def f(c, u, form):
+        S.exiger(u, "demo.reinitialiser")
+        from .demo import charger
+        return charger(c)
+    r = await action(request, "/connexion", "/parametres", f,
+                     lambda res: f"Démonstration chargée : {res['factures']} factures émises, {res['a_verifier']} commandes à vérifier.")
+    request.session.pop("uid", None)
+    return r
 
 
 @app.post("/parametres/reinitialiser")

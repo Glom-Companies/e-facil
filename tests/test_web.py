@@ -118,3 +118,13 @@ def test_journal_filtres_et_integrite(client):
     r = client.get("/journal?verifier=1")
     assert "Journal intègre" in r.text
     assert client.get("/journal?categorie=inconnue&acteur=personne").status_code == 200
+
+
+def test_connexion_compte_demo_en_un_clic(client):
+    page = client.get("/connexion").text
+    r = client.post("/connexion", data={"csrf": csrf(page), "demo": "1", "login": "rodrigue"})
+    assert r.status_code == 200 and "Se déconnecter" in r.text
+    client.post("/deconnexion")
+    page = client.get("/connexion").text
+    r = client.post("/connexion", data={"csrf": csrf(page), "login": "rodrigue"})
+    assert "Se déconnecter" not in r.text  # sans le clic de démonstration, le mot de passe reste exigé

@@ -192,11 +192,13 @@ def connexion(request: Request):
 
 
 @app.post("/connexion")
-async def connexion_post(request: Request, login: str = Form(...), mot_de_passe: str = Form(...),
-                         csrf: str = Form("")):
+async def connexion_post(request: Request, login: str = Form(...), mot_de_passe: str = Form(""),
+                         csrf: str = Form(""), demo: str = Form("")):
     c = conn()
     try:
         verifier_csrf(request, csrf)
+        if demo:  # compte de démonstration en un clic : refusé si son mot de passe a été changé
+            mot_de_passe = S.MOT_DE_PASSE_DEMO
         u = S.authentifier(c, login, mot_de_passe)
         if not u:
             with transaction(c):

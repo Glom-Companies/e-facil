@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block titre %}Connexion{% endblock %}
+{% block contenu %}
+<div class="connexion">
+  <div class="text-center mb-4">
+    <span class="marque-carre mx-auto mb-2" style="width:44px;height:44px;font-size:1.3rem">F</span>
+    <h1 class="h2 mb-0">{{ entreprise.raison_sociale }}</h1>
+    <p class="text-secondary"><strong>e-FACIL</strong> · de la commande reçue à la facture vérifiable</p>
+  </div>
+  <div class="card">
+    <div class="card-body">
+      <form method="post" action="/connexion" autocomplete="off">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <div class="mb-3">
+          <label class="form-label" for="login">Identifiant</label>
+          <input class="form-control" id="login" name="login" required autofocus placeholder="aicha">
+        </div>
+        <div class="mb-3">
+          <label class="form-label" for="mdp">Mot de passe</label>
+          <input class="form-control" id="mdp" name="mot_de_passe" type="password" required>
+        </div>
+        <button class="btn btn-primary w-100" type="submit">Se connecter</button>
+      </form>
+    </div>
+  </div>
+  <div class="card mt-3">
+    <div class="card-body">
+      <p class="text-secondary small mb-2">Comptes de démonstration (mot de passe dans le README) :</p>
+      <table class="comptes-demo small w-100">
+        {% for c in comptes %}<tr><td class="mono">{{ c.login }}</td><td>{{ c.nom }}</td><td class="text-secondary">{{ ROLES[c.role] }}</td></tr>{% endfor %}
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

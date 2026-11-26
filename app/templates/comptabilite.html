@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block titre %}Comptabilité{% endblock %}
+{% block contenu %}
+<div class="entete-page">
+  <div><h1>Comptabilité</h1><p class="sous">Rapport du jour sur le modèle du rapport Z de la DGI, écritures proposées et factures non payées.</p></div>
+  <a class="btn btn-outline-primary" href="/comptabilite/ecritures.csv">Exporter les écritures (CSV)</a>
+</div>
+<div class="row g-3">
+  <div class="col-lg-6">
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Rapport du {{ rapport.jour[8:10] }}/{{ rapport.jour[5:7] }}/{{ rapport.jour[0:4] }}</h2></div>
+      <div class="card-body">
+        {% if rapport.nombre %}
+        <h3 class="h5">Par type de document</h3>
+        <table class="table table-sm">{% for k, v in rapport.par_type.items() %}<tr><td>{{ 'Factures de vente (FV)' if k == 'FV' else 'Avoirs (FA)' }}</td><td class="num">{{ v.nombre }}</td><td class="num">{{ v.ttc|fcfa }}</td></tr>{% endfor %}</table>
+        <h3 class="h5">Par mode de paiement (avoirs déduits)</h3>
+        <table class="table table-sm">{% for k, v in rapport.par_paiement.items() %}<tr><td>{{ PAIEMENTS.get(k, k) }}</td><td class="num">{{ v|fcfa }}</td></tr>{% endfor %}</table>
+        <h3 class="h5">Par groupe de taxe</h3>
+        <table class="table table-sm"><tr><th>Groupe</th><th class="num">TTC</th><th class="num">HT</th><th class="num">TVA</th></tr>
+          {% for g, v in rapport.par_groupe.items() %}<tr><td>{{ g }}</td><td class="num">{{ v.ttc|fcfa }}</td><td class="num">{{ v.ht|fcfa }}</td><td class="num">{{ v.tva|fcfa }}</td></tr>{% endfor %}</table>
+        {% else %}<p class="vide">Aucune facture confirmée aujourd'hui.</p>{% endif %}
+      </div>
+    </div>
+  </div>
+  <div class="col-lg-6">
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Factures non payées</h2></div>
+      {% if impayees %}
+      <div class="table-responsive"><table class="table card-table table-responsive-empile">
+        <thead><tr><th>Numéro</th><th>Client</th><th>Échéance</th><th class="num">Reste</th></tr></thead>
+        {% for f in impayees %}
+        <tr><td data-label="Numéro"><a class="mono" href="/factures/{{ f.id }}">{{ f.numero }}</a></td><td data-label="Client">{{ f.contenu.client.nom }}</td>
+          <td data-label="Échéance" class="text-secondary">{{ f.valide_le[:10] }}</td><td data-label="Reste" class="num">{{ f.reste_a_payer|fcfa }}</td></tr>
+        {% endfor %}
+      </table></div>
+      <div class="card-footer small text-secondary">Cette liste ouvre sur le recouvrement (cas 1 du hackathon), hors de notre périmètre.</div>
+      {% else %}<p class="vide">Toutes les factures confirmées sont payées.</p>{% endif %}
+    </div>
+    <div class="card mt-3"><div class="card-body small text-secondary">
+      L'export propose les écritures 411 (client), 701 (ventes) et 4431 (TVA facturée). Les numéros de compte sont à faire confirmer par votre comptable.
+      Les petites entités au système minimal de trésorerie peuvent se limiter aux encaissements.
+    </div></div>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block titre %}Facturation{% endblock %} · {{ entreprise.raison_sociale or "Facturation PME" }}</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/core@1.0.0-beta20/dist/css/tabler.min.css">
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+<div class="bandeau-simulation">Prototype de démonstration · données fictives · émission DGI simulée</div>
+{% if u %}
+<header class="navbar navbar-expand-md d-print-none barre">
+  <div class="container-xl">
+    <button class="navbar-toggler" type="button" aria-label="Menu" onclick="document.getElementById('menu').classList.toggle('show')">
+      <span class="navbar-toggler-icon"></span>
+    </button>
+    <a href="/" class="navbar-brand marque">
+      <span class="marque-carre" aria-hidden="true">F</span>
+      <span><strong>{{ entreprise.raison_sociale }}</strong><small>e-FACIL · facturation</small></span>
+    </a>
+    <div class="navbar-nav flex-row order-md-last">
+      <div class="profil">
+        <span class="avatar avatar-sm">{{ u.nom[:1] }}</span>
+        <span class="d-none d-sm-inline"><strong>{{ u.nom }}</strong><small>{{ ROLES[u.role] }}{% if u.mode_solo %} · solo{% endif %}</small></span>
+        <form method="post" action="/deconnexion"><button class="btn btn-ghost-secondary btn-sm" type="submit">Quitter</button></form>
+      </div>
+    </div>
+    <nav class="collapse navbar-collapse" id="menu">
+      <ul class="navbar-nav">
+        {% set p = request.url.path %}
+        <li class="nav-item {% if p == '/' %}active{% endif %}"><a class="nav-link" href="/">Tableau de bord</a></li>
+        {% if u.role in ('vendeur', 'responsable') %}
+        <li class="nav-item {% if p.startswith('/dossiers') %}active{% endif %}"><a class="nav-link" href="/dossiers/nouveau">Nouvelle commande</a></li>
+        {% endif %}
+        <li class="nav-item {% if p.startswith('/factures') %}active{% endif %}"><a class="nav-link" href="/factures">Factures</a></li>
+        {% if u.role in ('comptable', 'responsable', 'admin') %}
+        <li class="nav-item {% if p.startswith('/comptabilite') %}active{% endif %}"><a class="nav-link" href="/comptabilite">Comptabilité</a></li>
+        {% endif %}
+        <li class="nav-item {% if p.startswith('/referentiels') %}active{% endif %}"><a class="nav-link" href="/referentiels">Clients et articles</a></li>
+        <li class="nav-item {% if p.startswith('/journal') %}active{% endif %}"><a class="nav-link" href="/journal">Journal</a></li>
+        {% if u.role == 'admin' %}
+        <li class="nav-item {% if p.startswith('/parametres') %}active{% endif %}"><a class="nav-link" href="/parametres">Paramètres</a></li>
+        {% endif %}
+      </ul>
+    </nav>
+  </div>
+</header>
+{% endif %}
+<main class="page-body">
+  <div class="container-xl">
+    {% if flash %}<div class="alert alert-success" role="status">{{ flash }}</div>{% endif %}
+    {% if erreur %}<div class="alert alert-danger" role="alert">{{ erreur }}</div>{% endif %}
+    {% block contenu %}{% endblock %}
+  </div>
+</main>
+<footer class="pied"><strong>e-FACIL</strong> par l'équipe BillGenius · prototype hackathon BWAI'2026, cas 2 · Les factures produites n'ont aucune valeur fiscale.</footer>
+{% block scripts %}{% endblock %}
+</body>
+</html>

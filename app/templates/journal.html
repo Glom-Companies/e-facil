@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block titre %}Journal{% endblock %}
+{% block contenu %}
+<div class="entete-page">
+  <div><h1>Journal d'audit</h1><p class="sous">Qui a fait quoi et quand. Chaque ligne contient l'empreinte de la précédente : toute modification se voit.</p></div>
+  <a class="btn btn-outline-primary" href="/journal?verifier=1">Vérifier l'intégrité</a>
+</div>
+{% if resultat %}
+  {% if resultat[0] %}<div class="alert alert-success">Journal intègre : {{ resultat[2] }} lignes vérifiées, aucune modification détectée.</div>
+  {% else %}<div class="alert alert-danger">Journal altéré à la ligne {{ resultat[1] }} : son contenu ne correspond plus à son empreinte.</div>{% endif %}
+{% endif %}
+<div class="card">
+  <div class="table-responsive">
+  <table class="table table-vcenter card-table table-responsive-empile">
+    <thead><tr><th>N°</th><th>Date</th><th>Qui</th><th>Action</th><th>Objet</th><th>Détails</th><th>Empreinte</th></tr></thead>
+    <tbody>
+    {% for l in lignes %}
+    <tr>
+      <td data-label="N°" class="num">{{ l.id }}</td>
+      <td data-label="Date" class="text-secondary">{{ l.horodatage|date_fr }}</td>
+      <td data-label="Qui">{{ noms.get(l.acteur, l.acteur) }}</td>
+      <td data-label="Action"><span class="mono">{{ l.action }}</span></td>
+      <td data-label="Objet" class="mono">{{ l.objet }}</td>
+      <td data-label="Détails" class="small text-secondary" style="max-width:24rem;overflow-wrap:anywhere">{{ l.details[:220] }}</td>
+      <td data-label="Empreinte" class="mono small text-secondary">{{ l.hash[:10] }}…</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div>
+{% endblock %}

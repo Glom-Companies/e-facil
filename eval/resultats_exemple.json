@@ -1,0 +1,84 @@
+{
+  "corpus": "exemple.jsonl",
+  "sha256": "b9db57511c38729bbad04006385c4f85849aa4e109f3c4ab1e536eb139dfcc40",
+  "messages": 3,
+  "date": "2026-11-26T01:30:52",
+  "resultats": {
+    "S0": {
+      "compteurs": {
+        "client": {
+          "justes": 3,
+          "total": 3,
+          "inventes": 0,
+          "vides_a_tort": 0,
+          "attendus_vides": 1
+        },
+        "mode_paiement": {
+          "justes": 3,
+          "total": 3,
+          "inventes": 0,
+          "vides_a_tort": 0,
+          "attendus_vides": 1
+        },
+        "total_cite": {
+          "justes": 3,
+          "total": 3,
+          "inventes": 0,
+          "vides_a_tort": 0,
+          "attendus_vides": 3
+        },
+        "ligne_article": {
+          "justes": 5,
+          "total": 5,
+          "inventes": 0,
+          "vides_a_tort": 0,
+          "attendus_vides": 0
+        },
+        "quantite_commandee": {
+          "justes": 5,
+          "total": 5,
+          "inventes": 0,
+          "vides_a_tort": 0,
+          "attendus_vides": 1
+        },
+        "quantite_livree": {
+          "justes": 2,
+          "total": 2,
+          "inventes": 0,
+          "vides_a_tort": 0,
+          "attendus_vides": 0
+        },
+        "prix_cite": {
+          "justes": 5,
+          "total": 5,
+          "inventes": 0,
+          "vides_a_tort": 0,
+          "attendus_vides": 4
+        },
+        "anomalie:ECART_COMMANDE_LIVRAISON": {
+          "detectees": 1,
+          "total": 1
+        },
+        "anomalie:QUANTITE_MANQUANTE": {
+          "detectees": 1,
+          "total": 1
+        },
+        "anomalie:CLIENT_INCONNU": {
+          "detectees": 1,
+          "total": 1
+        },
+        "sans_anomalie_bloquante": {
+          "justes": 1,
+          "total": 1
+        }
+      },
+      "erreurs": 0,
+      "secondes_par_message": 0.01
+    },
+    "S2": {
+      "compteurs": {},
+      "erreurs": 3,
+      "secondes_par_message": 0.0
+    }
+  }
+}

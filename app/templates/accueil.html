@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block titre %}Tableau de bord{% endblock %}
+{% block contenu %}
+<div class="entete-page">
+  <div><h1>Tableau de bord</h1><p class="sous">Commandes à transformer en factures, et factures récentes.</p></div>
+  {% if u.role in ('vendeur','responsable') %}<a class="btn btn-primary" href="/dossiers/nouveau">Nouvelle commande</a>{% endif %}
+</div>
+<div class="row g-3 mb-3">
+  <div class="col-6 col-lg-3"><div class="kpi"><div class="lib">Brouillons en cours</div><div class="val">{{ stats.brouillons }}</div></div></div>
+  <div class="col-6 col-lg-3"><div class="kpi"><div class="lib">Prêts à valider</div><div class="val">{{ stats.a_valider }}</div></div></div>
+  <div class="col-6 col-lg-3"><div class="kpi"><div class="lib">Factures confirmées</div><div class="val">{{ stats.confirmees }}</div></div></div>
+  <div class="col-6 col-lg-3"><div class="kpi"><div class="lib">Chiffre facturé (TTC, avoirs déduits)</div><div class="val">{{ stats.ca|fcfa }}</div></div></div>
+</div>
+<div class="row g-3">
+  <div class="col-lg-7">
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Brouillons à vérifier</h2></div>
+      {% if brouillons %}
+      <div class="table-responsive">
+      <table class="table table-vcenter card-table table-responsive-empile">
+        <thead><tr><th>N°</th><th>Client</th><th>Reçu</th><th>Contrôles</th><th class="num">Total TTC</th></tr></thead>
+        <tbody>
+        {% for d in brouillons %}
+        <tr>
+          <td data-label="N°"><a href="/dossiers/{{ d.id }}">Dossier {{ d.id }}</a></td>
+          <td data-label="Client">{{ d.client_nom }}</td>
+          <td data-label="Reçu" class="text-secondary">{{ CANAUX.get(d.canal, d.canal) }} · {{ d.cree_le|date_fr }}</td>
+          <td data-label="Contrôles">{% if d.bloquantes %}<span class="etat etat-ANNULEE">{{ d.bloquantes }} à trancher</span>{% else %}<span class="etat etat-CONFIRMEE">Prêt</span>{% endif %}</td>
+          <td data-label="Total TTC" class="num">{{ d.totaux.total_ttc|fcfa if d.totaux else '—' }}</td>
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      </div>
+      {% else %}<p class="vide">Aucun brouillon. Collez une commande reçue pour commencer.</p>{% endif %}
+    </div>
+  </div>
+  <div class="col-lg-5">
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Dernières factures</h2><a class="ms-auto small" href="/factures">Toutes</a></div>
+      {% if factures %}
+      <div class="table-responsive">
+      <table class="table table-vcenter card-table table-responsive-empile">
+        <thead><tr><th>Numéro</th><th>Client</th><th>État</th><th class="num">TTC</th></tr></thead>
+        <tbody>
+        {% for f in factures %}
+        <tr>
+          <td data-label="Numéro"><a class="mono" href="/factures/{{ f.id }}">{{ f.numero }}</a></td>
+          <td data-label="Client">{{ f.contenu.client.nom }}</td>
+          <td data-label="État"><span class="etat etat-{{ f.statut }}">{{ STATUTS[f.statut] }}</span></td>
+          <td data-label="TTC" class="num">{% if f.type == 'FA' %}−{% endif %}{{ f.total_ttc|fcfa }}</td>
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      </div>
+      {% else %}<p class="vide">Aucune facture pour l'instant.</p>{% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

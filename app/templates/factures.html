@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block titre %}Factures{% endblock %}
+{% block contenu %}
+<div class="entete-page"><div><h1>Factures et avoirs</h1><p class="sous">Documents validés. Ils ne se modifient plus.</p></div></div>
+<div class="card">
+  {% if factures %}
+  <div class="table-responsive">
+  <table class="table table-vcenter card-table table-responsive-empile">
+    <thead><tr><th>Numéro</th><th>Type</th><th>Client</th><th>Validée le</th><th>État</th><th class="num">Total TTC</th><th class="num">Net à payer</th></tr></thead>
+    <tbody>
+    {% for f in factures %}
+    <tr>
+      <td data-label="Numéro"><a class="mono" href="/factures/{{ f.id }}">{{ f.numero }}</a></td>
+      <td data-label="Type">{{ 'Avoir' if f.type == 'FA' else 'Vente' }}</td>
+      <td data-label="Client">{{ f.contenu.client.nom }}</td>
+      <td data-label="Validée le" class="text-secondary">{{ f.valide_le|date_fr }}</td>
+      <td data-label="État"><span class="etat etat-{{ f.statut }}">{{ STATUTS[f.statut] }}</span></td>
+      <td data-label="Total TTC" class="num">{% if f.type == 'FA' %}−{% endif %}{{ f.total_ttc|fcfa }}</td>
+      <td data-label="Net à payer" class="num">{% if f.type == 'FA' %}−{% endif %}{{ f.net_a_payer|fcfa }}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}<p class="vide">Aucune facture.</p>{% endif %}
+</div>
+{% endblock %}

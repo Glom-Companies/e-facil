@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+{% from "_icones.html" import icone %}
+{% block titre %}WhatsApp (simulé){% endblock %}
+{% block titre_haut %}WhatsApp (simulé){% endblock %}
+{% block contenu %}
+<div class="entete-page">
+  <div>
+    <h1>Commandes par WhatsApp</h1>
+    <p class="sous">Numéro de l'entreprise : <span class="mono">{{ numero_entreprise }}</span> · seuls les numéros habilités sont traités.</p>
+  </div>
+</div>
+
+<div class="grille-simu">
+  <div class="colonne-telephone">
+    <label class="form-label" for="numero">Téléphone de</label>
+    <select class="form-select mb-3" id="numero">
+      {% for h in habilites %}<option value="{{ h.numero }}">{{ h.nom }} · {{ ROLES[h.role] }} · {{ h.numero }}</option>{% endfor %}
+      <option value="{{ numero_inconnu }}">Numéro non autorisé · {{ numero_inconnu }}</option>
+    </select>
+
+    <div class="telephone telephone-simu">
+      <span class="encoche" aria-hidden="true"></span>
+      <div class="ecran ecran-simu">
+        <div class="wa-entete">
+          <img src="/static/img/icone.svg" alt="" width="34" height="34">
+          <div><strong>e-FACIL · {{ entreprise.raison_sociale }}</strong><small>Compte professionnel</small></div>
+        </div>
+        <div class="wa-fil" id="fil" aria-live="polite"></div>
+        <form class="wa-saisie" id="saisie" autocomplete="off">
+          <input type="hidden" name="csrf" value="{{ csrf }}">
+          <label class="wa-bouton" title="Joindre une photo ou un PDF">{{ icone('trombone', 20) }}
+            <input type="file" name="fichier" id="fichier" accept="image/jpeg,image/png,image/webp,application/pdf" hidden>
+          </label>
+          <input class="wa-texte" name="texte" id="texte" placeholder="Message" aria-label="Message">
+          <button class="wa-bouton wa-envoi" type="button" id="action" aria-label="Enregistrer une note vocale">{{ icone('micro', 20) }}</button>
+        </form>
+      </div>
+    </div>
+    <p class="etat-micro text-center" id="etat" role="status"></p>
+  </div>
+
+  <div>
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Ce que le bot comprend</h2></div>
+      <div class="card-body"><pre class="aide-bot">{{ aide_bot }}</pre></div>
+    </div>
+    <div class="card mt-3">
+      <div class="card-header"><h2 class="card-title">Numéros habilités</h2></div>
+      <div class="table-responsive">
+        <table class="table table-vcenter card-table">
+          <tbody>
+          {% for h in habilites %}
+          <tr><td><strong>{{ h.nom }}</strong> <span class="small text-secondary">· {{ ROLES[h.role] }}</span><div class="mono small">{{ h.numero }}</div></td></tr>
+          {% else %}
+          <tr><td class="text-secondary">Aucun numéro habilité.</td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% if u.role == 'admin' %}<div class="card-body pt-2"><a href="/parametres#canaux">Gérer les numéros</a></div>{% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+(function () {
+  const fil = document.getElementById('fil'), choix = document.getElementById('numero');
+  const texte = document.getElementById('texte'), fichier = document.getElementById('fichier');
+  const action = document.getElementById('action'), etat = document.getElementById('etat');
+  const csrf = document.querySelector('#saisie input[name=csrf]').value;
+  const ICONE_ENVOI = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 14L21 3M21 3l-6.5 18a.55.55 0 0 1-1 0L10 14l-7-3.5a.55.55 0 0 1 0-1z"/></svg>';
+  const ICONE_MICRO = action.innerHTML;
+  let dernier = '', occupe = false, enreg = null, morceaux = [];
+
+  // Construction du fil en DOM (textContent) : aucun texte reçu n'est interprété comme du HTML.
+  function bulle(m) {
+    const b = document.createElement('div');
+    b.className = 'wa-bulle ' + (m.sens === 'entrant' ? 'wa-moi' : 'wa-bot');
+    if (m.type === 'image' && m.media) { const i = document.createElement('img'); i.src = '/simulateur/media/' + m.media; i.alt = 'Photo envoyée'; b.appendChild(i); }
+    else if (m.type === 'audio' && m.media) { const a = document.createElement('audio'); a.controls = true; a.src = '/simulateur/media/' + m.media; b.appendChild(a); }
+    else if (m.type === 'document' && m.sens === 'entrant' && m.media) { const a = document.createElement('a'); a.href = '/simulateur/media/' + m.media; a.target = '_blank'; a.textContent = 'Document PDF'; b.appendChild(a); }
+    if (m.type === 'document' && m.facture_id) {
+      const a = document.createElement('a'); a.className = 'wa-doc'; a.href = '/factures/' + m.facture_id + '/pdf'; a.target = '_blank'; a.rel = 'noopener';
+      a.textContent = m.texte; b.appendChild(a);
+    } else if (m.texte) { const p = document.createElement('p'); p.textContent = m.texte; b.appendChild(p); }
+    if (m.sens === 'sortant' && m.dossier_id && m.type !== 'document') {
+      const a = document.createElement('a'); a.className = 'wa-lien'; a.href = m.facture_id ? '/factures/' + m.facture_id : '/dossiers/' + m.dossier_id;
+      a.textContent = m.facture_id ? 'Voir la facture dans e-FACIL' : 'Ouvrir le dossier n° ' + m.dossier_id; b.appendChild(a);
+    }
+    const h = document.createElement('time'); h.textContent = (m.horodatage || '').slice(11, 16); b.appendChild(h);
+    return b;
+  }
+  async function charger() {
+    try {
+      const r = await fetch('/simulateur/conversation?numero=' + encodeURIComponent(choix.value));
+      const j = await r.json(); if (!j.messages) return;
+      const cle = choix.value + ':' + j.messages.length + ':' + (j.messages.length ? j.messages[j.messages.length - 1].id : 0);
+      if (cle === dernier) return; dernier = cle;
+      fil.replaceChildren(...j.messages.map(bulle));
+      if (!j.messages.length) { const v = document.createElement('p'); v.className = 'wa-vide'; v.textContent = 'Écrivez AIDE pour voir les commandes.'; fil.appendChild(v); }
+      fil.scrollTop = fil.scrollHeight;
+    } catch (e) {}
+  }
+  async function envoyer(donnees) {
+    occupe = true; etat.textContent = 'Envoi…'; action.disabled = true;
+    donnees.append('csrf', csrf); donnees.append('numero', choix.value);
+    try {
+      const r = await fetch('/simulateur/envoyer', { method: 'POST', body: donnees });
+      const j = await r.json(); etat.textContent = j.erreur || '';
+    } catch (e) { etat.textContent = 'Réseau indisponible.'; }
+    occupe = false; action.disabled = false; majBouton(); dernier = ''; charger();
+  }
+  function majBouton() {
+    const pret = texte.value.trim() || fichier.files.length;
+    action.innerHTML = pret ? ICONE_ENVOI : ICONE_MICRO;
+    action.setAttribute('aria-label', pret ? 'Envoyer' : 'Enregistrer une note vocale');
+  }
+  texte.addEventListener('input', majBouton);
+  fichier.addEventListener('change', () => { majBouton(); if (fichier.files.length) etat.textContent = fichier.files[0].name + ' : ajoutez une légende si besoin, puis envoyez.'; });
+  document.getElementById('saisie').addEventListener('submit', e => { e.preventDefault(); action.click(); });
+  action.addEventListener('click', async () => {
+    if (occupe) return;
+    if (enreg && enreg.state === 'recording') { enreg.stop(); return; }
+    if (texte.value.trim() || fichier.files.length) {
+      const d = new FormData(); d.append('texte', texte.value);
+      if (fichier.files.length) d.append('fichier', fichier.files[0]);
+      texte.value = ''; fichier.value = ''; majBouton(); envoyer(d); return;
+    }
+    if (!navigator.mediaDevices || !window.MediaRecorder) { etat.textContent = 'Micro indisponible sur ce navigateur.'; return; }
+    let flux;
+    try { flux = await navigator.mediaDevices.getUserMedia({ audio: true }); } catch (e) { etat.textContent = 'Accès au micro refusé.'; return; }
+    morceaux = [];
+    const type = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg', 'audio/mp4'].find(t => MediaRecorder.isTypeSupported(t)) || '';
+    enreg = new MediaRecorder(flux, type ? { mimeType: type } : undefined);
+    enreg.ondataavailable = e => { if (e.data.size) morceaux.push(e.data); };
+    enreg.onstop = () => {
+      flux.getTracks().forEach(t => t.stop()); action.classList.remove('actif');
+      const mime = (enreg.mimeType || 'audio/webm').split(';')[0];
+      const d = new FormData(); d.append('fichier', new Blob(morceaux, { type: mime }), 'note-vocale');
+      envoyer(d);
+    };
+    enreg.start(); action.classList.add('actif'); etat.textContent = 'Enregistrement… touchez à nouveau pour envoyer.';
+  });
+  choix.addEventListener('change', () => { dernier = ''; charger(); });
+  charger(); setInterval(() => { if (!occupe) charger(); }, 2500);
+})();
+</script>
+{% endblock %}

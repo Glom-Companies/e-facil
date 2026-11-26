@@ -445,7 +445,7 @@ def extraire_ollama(texte: str) -> dict:
 
 EXTRACTEURS = {"regles": "Règles simples (sans IA)", "gemini": "IA Gemini", "groq": "IA Groq",
                "ollama": "IA locale (Ollama)"}
-CLES_API = {"gemini": "GEMINI_API_KEY", "groq": "GROQ_API_KEY"}
+CLES_API = {"groq": "GROQ_API_KEY", "gemini": "GEMINI_API_KEY"}  # ordre de préférence et de repli
 LIT_LES_DOCUMENTS = {"gemini"}  # extracteurs capables de lire une photo ou un PDF
 
 

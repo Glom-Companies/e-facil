@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_icones.html" import icone %}
 {% block titre %}Nouvelle commande{% endblock %}
 {% block contenu %}
 <div class="entete-page">
@@ -10,25 +11,21 @@
     <div class="card">
       <div class="card-header"><h2 class="card-title">Bon de commande</h2></div>
       <div class="card-body">
-        <div class="row g-2 mb-3">
-          <div class="col-sm-6">
-            <label class="form-label" for="canal">Reçu par</label>
-            <select class="form-select" id="canal" name="canal">
-              {% for k, v in CANAUX.items() %}<option value="{{ k }}">{{ v }}</option>{% endfor %}
-            </select>
-          </div>
-          <div class="col-sm-6">
-            <label class="form-label" for="extracteur">Lecture du message</label>
-            <select class="form-select" id="extracteur" name="extracteur">
-              {% for k, v in EXTRACTEURS.items() %}<option value="{{ k }}" {% if k == extracteur_defaut %}selected{% endif %}>{{ v }}</option>{% endfor %}
-            </select>
-          </div>
+        <div class="mb-3" style="max-width:16rem">
+          <label class="form-label" for="canal">Reçu par</label>
+          <select class="form-select" id="canal" name="canal">
+            {% for k, v in CANAUX.items() %}<option value="{{ k }}">{{ v }}</option>{% endfor %}
+          </select>
         </div>
-        <label class="form-label" for="texte_commande">Message du client</label>
+        <div class="d-flex align-items-end justify-content-between gap-2 mb-2">
+          <label class="form-label mb-0" for="texte_commande">Message du client</label>
+          <button type="button" class="btn btn-blanc btn-micro" id="micro" aria-pressed="false">{{ icone('micro', 18) }}<span>Dicter</span></button>
+        </div>
         <textarea class="form-control mono" id="texte_commande" name="texte_commande" rows="7"
           placeholder="Bjr, c'est Dossou. Envoie 12 cartons de savon et 5 sacs de riz. Je paie momo"></textarea>
+        <p class="etat-micro" id="etat-micro" role="status" aria-live="polite"></p>
         <div class="mt-3">
-          <label class="form-label" for="document">Ou photo ou PDF du bon de commande <span class="text-secondary">(lecture par l'IA Gemini)</span></label>
+          <label class="form-label" for="document">Ou photo ou PDF du bon de commande</label>
           <input class="form-control" type="file" id="document" name="document" accept="image/jpeg,image/png,image/webp,application/pdf">
         </div>
       </div>
@@ -77,6 +74,43 @@ document.querySelectorAll('[data-index]').forEach(b => b.addEventListener('click
   document.getElementById('texte_livraison').value = e.livraison || '';
   document.getElementById('canal').value = e.canal || 'WHATSAPP';
 }));
+// Dictée : enregistrement au micro, transcription côté serveur (Groq Whisper, puis Gemini), texte à relire.
+(function () {
+  const bouton = document.getElementById('micro'), etat = document.getElementById('etat-micro');
+  const zone = document.getElementById('texte_commande');
+  let enreg = null, morceaux = [], debut = 0, minuterie = null;
+  const libelle = t => { bouton.querySelector('span').textContent = t; };
+  if (!navigator.mediaDevices || !window.MediaRecorder) { bouton.disabled = true; bouton.title = 'Micro indisponible sur ce navigateur'; return; }
+  bouton.addEventListener('click', async () => {
+    if (enreg && enreg.state === 'recording') { enreg.stop(); return; }
+    let flux;
+    try { flux = await navigator.mediaDevices.getUserMedia({ audio: true }); }
+    catch (e) { etat.textContent = "Accès au micro refusé."; return; }
+    morceaux = [];
+    const type = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg', 'audio/mp4'].find(t => MediaRecorder.isTypeSupported(t)) || '';
+    enreg = new MediaRecorder(flux, type ? { mimeType: type } : undefined);
+    enreg.ondataavailable = e => { if (e.data.size) morceaux.push(e.data); };
+    enreg.onstop = async () => {
+      flux.getTracks().forEach(t => t.stop()); clearInterval(minuterie);
+      bouton.classList.remove('actif'); bouton.setAttribute('aria-pressed', 'false'); libelle('Dicter');
+      bouton.disabled = true; etat.textContent = 'Transcription…';
+      const fd = new FormData();
+      fd.append('csrf', document.querySelector('input[name=csrf]').value);
+      fd.append('audio', new Blob(morceaux, { type: (enreg.mimeType || 'audio/webm').split(';')[0] }), 'note');
+      try {
+        const r = await fetch('/transcrire', { method: 'POST', body: fd });
+        const j = await r.json();
+        if (j.texte) { zone.value = (zone.value ? zone.value + '\n' : '') + j.texte; etat.textContent = 'Relisez le texte dicté avant de lancer la lecture.'; zone.focus(); }
+        else etat.textContent = j.erreur || 'Transcription impossible.';
+      } catch (e) { etat.textContent = 'Transcription impossible : réseau indisponible.'; }
+      bouton.disabled = false;
+    };
+    enreg.start(); debut = Date.now();
+    bouton.classList.add('actif'); bouton.setAttribute('aria-pressed', 'true'); etat.textContent = '';
+    const tic = () => { const s = Math.floor((Date.now() - debut) / 1000); libelle('Arrêter · ' + Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0')); };
+    tic(); minuterie = setInterval(tic, 500);
+  });
+})();
 document.getElementById('form-commande').addEventListener('submit', e => {
   const b = e.target.querySelector('button[type=submit]');
   b.disabled = true; b.textContent = 'Lecture en cours…';

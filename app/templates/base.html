@@ -23,8 +23,8 @@
     <nav class="nav-lat">
       <a class="nav-lien {% if p == '/' %}actif{% endif %}" href="/">{{ icone('tableau') }}<span>Tableau de bord</span></a>
 
-      <details class="nav-groupe" {% if p.startswith('/dossiers') or p.startswith('/factures') or p.startswith('/referentiels') %}open{% endif %}>
-        <summary class="nav-lien {% if p.startswith('/dossiers') or p.startswith('/factures') or p.startswith('/referentiels') %}groupe-actif{% endif %}">
+      <details class="nav-groupe" {% if p.startswith('/dossiers') or p.startswith('/factures') or p.startswith('/referentiels') or p.startswith('/simulateur') %}open{% endif %}>
+        <summary class="nav-lien {% if p.startswith('/dossiers') or p.startswith('/factures') or p.startswith('/referentiels') or p.startswith('/simulateur') %}groupe-actif{% endif %}">
           {{ icone('facture') }}<span>Facturation</span>{{ icone('bas', 16) }}</summary>
         <div class="nav-sous">
           {% if u.role in ('vendeur', 'responsable') %}
@@ -33,6 +33,9 @@
           <a class="{% if p.startswith('/dossiers') and p != '/dossiers/nouveau' %}actif{% endif %}" href="/dossiers">Brouillons{% if nb_brouillons %} <span class="compteur">{{ nb_brouillons }}</span>{% endif %}</a>
           <a class="{% if p.startswith('/factures') %}actif{% endif %}" href="/factures">Factures et avoirs</a>
           <a class="{% if p.startswith('/referentiels') %}actif{% endif %}" href="/referentiels">Clients et articles</a>
+          {% if u.role in ('admin', 'responsable') %}
+          <a class="{% if p.startswith('/simulateur') %}actif{% endif %}" href="/simulateur">WhatsApp (simulé)</a>
+          {% endif %}
         </div>
       </details>
 
@@ -43,7 +46,9 @@
           {% if u.role in ('comptable', 'responsable', 'admin') %}
           <a class="{% if p.startswith('/comptabilite') %}actif{% endif %}" href="/comptabilite">Comptabilité</a>
           {% endif %}
+          {% if u.role in ('responsable', 'comptable', 'admin') %}
           <a class="{% if p.startswith('/journal') %}actif{% endif %}" href="/journal">Journal d'audit</a>
+          {% endif %}
           {% if u.role == 'admin' %}
           <a class="{% if p.startswith('/parametres') %}actif{% endif %}" href="/parametres">Paramètres</a>
           {% endif %}

@@ -4,13 +4,15 @@ from __future__ import annotations
 import base64
 from datetime import date
 import json
+import re
 import os
 import secrets
+import time
 import uuid
 from pathlib import Path
 
 from fastapi import FastAPI, Form, Request, UploadFile
-from fastapi.responses import HTMLResponse, RedirectResponse, Response
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from markupsafe import Markup, escape
@@ -19,7 +21,10 @@ from starlette.middleware.sessions import SessionMiddleware
 from . import services as S
 from .brouillon import LIBELLES, montants_par_ligne
 from .db import ecrire_parametre, lire_parametre, transaction, verifier_journal, journaliser
-from .extraction import EXTRACTEURS, ia_disponibles
+from . import canaux
+from . import db as _db
+from . import voix as transcription
+from .extraction import EXTRACTEURS, ErreurExtraction, ia_disponibles
 from .moteur import ErreurCalcul, format_fcfa, lire_taux_tva
 from .pdf import LIBELLES_PAIEMENT, generer
 from .texte import localiser
@@ -40,6 +45,24 @@ def _charger_env() -> None:
 _charger_env()
 
 app = FastAPI(title="e-FACIL - prototype BillGenius, BWAI'2026", docs_url=None, redoc_url=None)
+
+
+@app.middleware("http")
+async def espace_courant(request: Request, call_next):
+    """Chaque requête travaille dans la base de l'entreprise de la session (déclaré avant la session :
+    ce middleware s'exécute donc à l'intérieur de SessionMiddleware)."""
+    slug = request.session.get("espace")
+    try:
+        valide = bool(slug) and _db.chemin_espace(slug).is_file()
+    except ValueError:
+        valide = False
+    jeton = _db.ESPACE.set(slug if valide else None)
+    try:
+        return await call_next(request)
+    finally:
+        _db.ESPACE.reset(jeton)
+
+
 app.add_middleware(SessionMiddleware, secret_key=os.environ.get("SECRET_SESSION") or secrets.token_hex(32),
                    same_site="strict", max_age=8 * 3600)
 app.mount("/static", StaticFiles(directory=ICI / "static"), name="static")
@@ -146,7 +169,12 @@ def verifier_csrf(request: Request, jeton: str) -> None:
 
 def page(request: Request, nom: str, c, u, **ctx):
     if u:
-        ctx.setdefault("nb_brouillons", c.execute("SELECT COUNT(*) FROM dossiers WHERE statut = 'BROUILLON'").fetchone()[0])
+        if S.restreint(u):
+            n = c.execute("SELECT COUNT(*) FROM dossiers WHERE statut = 'BROUILLON' AND cree_par = ?", (u["id"],))
+        else:
+            n = c.execute("SELECT COUNT(*) FROM dossiers WHERE statut = 'BROUILLON'")
+        ctx.setdefault("nb_brouillons", n.fetchone()[0])
+    ctx.update(ROLES=S.libelles_roles(c), restreint=S.restreint(u))
     ctx.update(request=request, u=u, csrf=jeton_csrf(request), entreprise=S.entreprise(c),
                flash=request.session.pop("flash", None), erreur=request.session.pop("erreur", None),
                idem=str(uuid.uuid4()))
@@ -186,26 +214,47 @@ def connexion(request: Request):
     c = conn()
     try:
         comptes = [dict(r) for r in c.execute("SELECT login, nom, role FROM utilisateurs ORDER BY id")]
-        return page(request, "connexion.html", c, None, comptes=comptes)
+        return page(request, "connexion.html", c, None, comptes=comptes, espaces=S.espaces())
     finally:
         c.close()
 
 
+ECHECS_CONNEXION: dict[tuple, list[float]] = {}  # 5 échecs en 5 minutes bloquent ce couple poste / identifiant
+
+
 @app.post("/connexion")
 async def connexion_post(request: Request, login: str = Form(...), mot_de_passe: str = Form(""),
-                         csrf: str = Form(""), demo: str = Form("")):
+                         csrf: str = Form(""), demo: str = Form(""), espace: str = Form("")):
     c = conn()
     try:
         verifier_csrf(request, csrf)
+        if espace:
+            try:
+                chemin = _db.chemin_espace(espace)
+            except ValueError:
+                chemin = None
+            if not chemin or not chemin.is_file():
+                raise S.Refus("Espace inconnu.")
+            c.close()
+            c = S.ouvrir(chemin)
         if demo:  # compte de démonstration en un clic : refusé si son mot de passe a été changé
             mot_de_passe = S.MOT_DE_PASSE_DEMO
+        cle_essais = (request.client.host if request.client else "?", espace, login.strip().lower()[:40])
+        instant = time.time()
+        essais = [t for t in ECHECS_CONNEXION.get(cle_essais, []) if instant - t < 300]
+        if len(essais) >= 5:
+            raise S.Refus("Trop d'essais : réessayez dans quelques minutes.")
         u = S.authentifier(c, login, mot_de_passe)
         if not u:
+            ECHECS_CONNEXION[cle_essais] = essais + [instant]
             with transaction(c):
                 journaliser(c, "anonyme", "CONNEXION_REFUSEE", f"login:{login[:40]}", {})
             return retour(request, "/connexion", erreur="Identifiant ou mot de passe incorrect.")
+        ECHECS_CONNEXION.pop(cle_essais, None)
         request.session.clear()
         request.session["uid"] = u["id"]
+        if espace:
+            request.session["espace"] = espace
         with transaction(c):
             journaliser(c, u["id"], "CONNEXION", f"utilisateur:{u['id']}", {})
         return retour(request, "/", flash=f"Bonjour {u['nom']}.")
@@ -213,6 +262,31 @@ async def connexion_post(request: Request, login: str = Form(...), mot_de_passe:
         return retour(request, "/connexion", erreur=str(e))
     finally:
         c.close()
+
+
+@app.get("/inscription", response_class=HTMLResponse)
+def inscription(request: Request):
+    c = conn()
+    try:
+        return page(request, "inscription.html", c, None, tailles=S.TAILLES, regimes=S.REGIMES)
+    finally:
+        c.close()
+
+
+@app.post("/inscription")
+async def inscription_post(request: Request):
+    form = await request.form()
+    c = conn()
+    try:
+        verifier_csrf(request, form.get("csrf", ""))
+        slug, uid, conseil = S.creer_espace({k: str(v) for k, v in form.items() if isinstance(v, str)})
+    except S.Refus as e:
+        return retour(request, "/inscription", erreur=str(e))
+    finally:
+        c.close()
+    request.session.clear()
+    request.session["espace"], request.session["uid"] = slug, uid
+    return retour(request, "/parametres#canaux", flash="Espace créé. " + conseil)
 
 
 @app.post("/deconnexion")
@@ -242,13 +316,17 @@ def avec_utilisateur(fonction):
 @app.get("/", response_class=HTMLResponse)
 async def accueil(request: Request):
     async def vue(request, c, u):
-        brouillons = lister_dossiers(c, "BROUILLON", 30)
+        brouillons = lister_dossiers(c, "BROUILLON", 30, u)
+        visibles = S.dossiers_visibles(c, u)
         factures = [dict(r, contenu=json.loads(r["contenu"])) for r in
-                    c.execute("SELECT * FROM factures ORDER BY id DESC LIMIT 12")]
+                    c.execute("SELECT * FROM factures ORDER BY id DESC LIMIT 200")]
+        factures = [f for f in factures if S.facture_visible(f, visibles, _origines(c))][:12]
         stats = {
             "brouillons": len(brouillons),
             "a_valider": sum(1 for d in brouillons if d["bloquantes"] == 0),
-            "confirmees": c.execute("SELECT COUNT(*) FROM factures WHERE statut='CONFIRMEE' AND type='FV'").fetchone()[0],
+            "confirmees": sum(1 for f in factures if f["statut"] == "CONFIRMEE" and f["type"] == "FV")
+            if visibles is not None else
+            c.execute("SELECT COUNT(*) FROM factures WHERE statut='CONFIRMEE' AND type='FV'").fetchone()[0],
             "ca": c.execute("SELECT COALESCE(SUM(CASE type WHEN 'FV' THEN total_ttc ELSE -total_ttc END),0) "
                             "FROM factures WHERE statut='CONFIRMEE'").fetchone()[0],
         }
@@ -257,12 +335,22 @@ async def accueil(request: Request):
     return await avec_utilisateur(vue)(request)
 
 
-def lister_dossiers(c, etat: str | None, limite: int = 200) -> list[dict]:
-    """Dossiers de vente, du plus récent au plus ancien, avec le client et le nombre de blocages."""
+def _origines(c) -> dict[int, int]:
+    """Facture de vente -> dossier, pour rattacher un avoir au dossier de sa facture d'origine."""
+    return {r["id"]: r["dossier_id"] for r in c.execute("SELECT id, dossier_id FROM factures WHERE type = 'FV'")}
+
+
+def lister_dossiers(c, etat: str | None, limite: int = 200, u: dict | None = None) -> list[dict]:
+    """Dossiers de vente, du plus récent au plus ancien, avec le client et le nombre de blocages.
+    Un vendeur d'une équipe ne voit que les siens."""
+    filtre, params = ("", ())
+    if S.restreint(u):
+        filtre, params = (" AND cree_par = ?", (u["id"],))
     if etat:
-        lignes = c.execute("SELECT id FROM dossiers WHERE statut = ? ORDER BY id DESC LIMIT ?", (etat, limite))
+        lignes = c.execute(f"SELECT id FROM dossiers WHERE statut = ?{filtre} ORDER BY id DESC LIMIT ?",
+                           (etat, *params, limite))
     else:
-        lignes = c.execute("SELECT id FROM dossiers ORDER BY id DESC LIMIT ?", (limite,))
+        lignes = c.execute(f"SELECT id FROM dossiers WHERE 1 = 1{filtre} ORDER BY id DESC LIMIT ?", (*params, limite))
     res = []
     for r in lignes.fetchall():
         d = S.dossier(c, r["id"])
@@ -276,7 +364,13 @@ def lister_dossiers(c, etat: str | None, limite: int = 200) -> list[dict]:
 @app.get("/recherche", response_class=HTMLResponse)
 async def recherche(request: Request, q: str = ""):
     async def vue(request, c, u):
-        return page(request, "recherche.html", c, u, q=q, res=S.rechercher(c, q))
+        res = S.rechercher(c, q)
+        visibles = S.dossiers_visibles(c, u)
+        if visibles is not None:
+            origines = _origines(c)
+            res = {"dossiers": [d for d in res["dossiers"] if d["id"] in visibles],
+                   "factures": [f for f in res["factures"] if S.facture_visible(f, visibles, origines)]}
+        return page(request, "recherche.html", c, u, q=q, res=res)
     return await avec_utilisateur(vue)(request)
 
 
@@ -294,9 +388,14 @@ ETATS_DOSSIER = {"BROUILLON": "À vérifier", "VALIDE": "Validés", "SUPPRIME": 
 async def liste_dossiers(request: Request, etat: str = "BROUILLON"):
     async def vue(request, c, u):
         choisi = etat if etat in ETATS_DOSSIER else "BROUILLON"
-        comptes = {k: n for k, n in c.execute("SELECT statut, COUNT(*) FROM dossiers GROUP BY statut")}
+        if S.restreint(u):
+            comptes = {k: n for k, n in c.execute("SELECT statut, COUNT(*) FROM dossiers WHERE cree_par = ? "
+                                                  "GROUP BY statut", (u["id"],))}
+        else:
+            comptes = {k: n for k, n in c.execute("SELECT statut, COUNT(*) FROM dossiers GROUP BY statut")}
         comptes["tous"] = sum(comptes.values())
-        return page(request, "dossiers.html", c, u, dossiers=lister_dossiers(c, None if choisi == "tous" else choisi),
+        return page(request, "dossiers.html", c, u, dossiers=lister_dossiers(c, None if choisi == "tous" else choisi,
+                                                                             200, u),
                     etat=choisi, etats=ETATS_DOSSIER, comptes=comptes)
     return await avec_utilisateur(vue)(request)
 
@@ -310,8 +409,7 @@ EXEMPLES = json.loads((RACINE / "data" / "exemples.json").read_text(encoding="ut
 @app.get("/dossiers/nouveau", response_class=HTMLResponse)
 async def nouveau(request: Request):
     async def vue(request, c, u):
-        defaut = (ia_disponibles() or ["regles"])[0]
-        return page(request, "nouveau.html", c, u, exemples=EXEMPLES, extracteur_defaut=defaut)
+        return page(request, "nouveau.html", c, u, exemples=EXEMPLES)
     return await avec_utilisateur(vue)(request)
 
 
@@ -327,10 +425,163 @@ async def nouveau_post(request: Request):
             mime, nom = fichier.content_type, fichier.filename
             if mime not in ("image/jpeg", "image/png", "image/webp", "application/pdf"):
                 raise S.Refus("Formats acceptés : photo JPEG, PNG, WEBP ou PDF.")
+        # Le choix de l'IA se fait côté serveur (Groq, puis Gemini, puis local) ; « regles » reste possible
+        # pour les tests et la mesure.
+        extracteur = "regles" if form.get("extracteur") == "regles" else S.extracteur_auto(bool(octets))
         return S.creer_dossier(c, u, form.get("canal", "WHATSAPP"), form.get("texte_commande", ""),
-                               form.get("texte_livraison", ""), form.get("extracteur", "regles"), octets, mime, nom)
+                               form.get("texte_livraison", ""), extracteur, octets, mime, nom)
     return await action(request, lambda did: f"/dossiers/{did}", "/dossiers/nouveau", f,
                         "Brouillon créé. Vérifiez chaque champ avant de le proposer à la validation.")
+
+
+@app.post("/transcrire")
+async def transcrire_note(request: Request):
+    """Note vocale enregistrée au micro -> texte de la commande (à relire avant l'envoi)."""
+    c = conn()
+    try:
+        u = utilisateur(request, c)
+        if not u:
+            return JSONResponse({"erreur": "Session expirée : reconnectez-vous."}, status_code=401)
+        form = await request.form()
+        verifier_csrf(request, form.get("csrf", ""))
+        S.exiger(u, "dossier.ecrire")
+        audio = form.get("audio")
+        if not hasattr(audio, "read"):
+            raise S.Refus("Aucun enregistrement reçu.")
+        octets = await audio.read(transcription.TAILLE_MAX + 1)
+        texte, moteur = transcription.transcrire(octets, audio.content_type)
+        with transaction(c):
+            journaliser(c, u["id"], "NOTE_VOCALE_TRANSCRITE", "commande", {"moteur": moteur, "octets": len(octets)})
+        return JSONResponse({"texte": texte, "moteur": moteur})
+    except (S.Refus, ErreurExtraction) as e:
+        return JSONResponse({"erreur": str(e)}, status_code=400)
+    finally:
+        c.close()
+
+
+# --- Canaux : webhook WhatsApp (format Meta, signé) et simulateur de téléphone -------------------
+
+ROLES_SIMULATEUR = {"admin", "responsable"}  # le simulateur joue n'importe quel téléphone : réservé
+SIMULATEUR_ACTIF = os.environ.get("SIMULATEUR_ACTIF", "1") != "0"  # à couper en production
+
+
+@app.get("/webhook/whatsapp")
+def webhook_verification(request: Request):
+    """Vérification de l'abonnement par Meta (hub.challenge)."""
+    q = request.query_params
+    if q.get("hub.mode") == "subscribe" and secrets.compare_digest(q.get("hub.verify_token", ""),
+                                                                    canaux.JETON_VERIFICATION):
+        return Response(q.get("hub.challenge", ""), media_type="text/plain")
+    return Response("Interdit", status_code=403)
+
+
+@app.post("/webhook/whatsapp")
+async def webhook(request: Request):
+    corps = await request.body()
+    if len(corps) > 1_000_000:
+        return JSONResponse({"erreur": "Message trop volumineux."}, status_code=413)
+    c = conn()
+    try:
+        n = canaux.recevoir(c, corps, request.headers.get("x-hub-signature-256"))
+        return JSONResponse({"traites": n})
+    except S.Refus as e:
+        return JSONResponse({"erreur": str(e)}, status_code=401)
+    except (ValueError, KeyError):
+        return JSONResponse({"erreur": "Message illisible."}, status_code=400)
+    finally:
+        c.close()
+
+
+def _simulateur_autorise(u) -> None:
+    if not SIMULATEUR_ACTIF:
+        raise S.Refus("Simulateur désactivé.")
+    if u["role"] not in ROLES_SIMULATEUR:
+        raise S.Refus("Le simulateur de téléphone est réservé au responsable et à l'administrateur.")
+
+
+@app.get("/simulateur", response_class=HTMLResponse)
+async def simulateur(request: Request):
+    async def vue(request, c, u):
+        _simulateur_autorise(u)
+        cfg = canaux.config(c).get("whatsapp", {})
+        return page(request, "simulateur.html", c, u, habilites=canaux.habilites(c),
+                    numero_entreprise=cfg.get("numero_entreprise", ""), numero_inconnu="+229 01 99 99 99 99",
+                    aide_bot=canaux.AIDE)
+    return await avec_utilisateur(vue)(request)
+
+
+@app.get("/simulateur/conversation")
+async def simulateur_conversation(request: Request, numero: str = ""):
+    c = conn()
+    try:
+        u = utilisateur(request, c)
+        if not u:
+            return JSONResponse({"erreur": "Session expirée."}, status_code=401)
+        _simulateur_autorise(u)
+        return JSONResponse({"messages": canaux.conversation(c, numero)})
+    except S.Refus as e:
+        return JSONResponse({"erreur": str(e)}, status_code=403)
+    finally:
+        c.close()
+
+
+@app.post("/simulateur/envoyer")
+async def simulateur_envoyer(request: Request):
+    """Le téléphone simulé envoie un message : il est déposé, signé et passé au webhook, comme chez Meta."""
+    c = conn()
+    try:
+        u = utilisateur(request, c)
+        if not u:
+            return JSONResponse({"erreur": "Session expirée."}, status_code=401)
+        form = await request.form()
+        verifier_csrf(request, form.get("csrf", ""))
+        _simulateur_autorise(u)
+        numero, texte = str(form.get("numero", "")), str(form.get("texte", ""))[:4000]
+        fichier = form.get("fichier")
+        if hasattr(fichier, "read") and fichier.filename:
+            octets = await fichier.read(canaux.TAILLE_MAX_MEDIA + 1)
+            mime = (fichier.content_type or "").split(";")[0].strip().lower()
+            type_msg = "image" if mime.startswith("image/") else "audio" if mime.startswith("audio/") else "document"
+            media_id = canaux.deposer_media(octets, mime)
+            message = canaux.message_meta(numero, type_msg, texte, media_id, mime,
+                                          None if type_msg == "audio" else os.path.basename(fichier.filename)[:80])
+        elif texte.strip():
+            message = canaux.message_meta(numero, "text", texte)
+        else:
+            raise S.Refus("Message vide.")
+        corps = json.dumps(message, ensure_ascii=False).encode("utf-8")
+        canaux.recevoir(c, corps, canaux.signer(corps))
+        return JSONResponse({"ok": True})
+    except S.Refus as e:
+        return JSONResponse({"erreur": str(e)}, status_code=400)
+    finally:
+        c.close()
+
+
+@app.get("/simulateur/media/{media_id}")
+async def simulateur_media(request: Request, media_id: str):
+    async def vue(request, c, u):
+        _simulateur_autorise(u)
+        m = canaux.lire_media(media_id)
+        if not m:
+            raise S.Refus("Fichier introuvable.")
+        return Response(m[0], media_type=m[1], headers={"X-Content-Type-Options": "nosniff",
+                                                        "Cache-Control": "private, no-store"})
+    return await avec_utilisateur(vue)(request)
+
+
+@app.get("/dossiers/{did}/piece")
+async def piece_jointe(request: Request, did: int):
+    async def vue(request, c, u):
+        S.verifier_acces_dossier(c, u, did)
+        S.dossier(c, did)  # dossier existant, utilisateur connecté
+        p = S.piece(did)
+        if not p:
+            raise S.Refus("Aucune pièce jointe pour ce dossier.")
+        octets, mime = p
+        return Response(octets, media_type=mime, headers={
+            "Content-Disposition": "inline", "X-Content-Type-Options": "nosniff", "Cache-Control": "private, no-store"})
+    return await avec_utilisateur(vue)(request)
 
 
 # --- Revue d'un dossier ------------------------------------------------------------------
@@ -338,6 +589,7 @@ async def nouveau_post(request: Request):
 @app.get("/dossiers/{did}", response_class=HTMLResponse)
 async def revue(request: Request, did: int):
     async def vue(request, c, u):
+        S.verifier_acces_dossier(c, u, did)
         d = S.dossier(c, did)
         br = d["brouillon"]
         cit_cmd, cit_bl = [], []
@@ -361,7 +613,8 @@ async def revue(request: Request, did: int):
         index = {a["id"]: a for a in arts}
         facture_id = d.get("facture_id")
         montants = montants_par_ligne(br, arts) if d.get("totaux") else {}
-        return page(request, "dossier.html", c, u, d=d, br=br, clients=S.clients(c), articles=arts, index=index,
+        p = S.piece(did)
+        return page(request, "dossier.html", c, u, d=d, br=br, piece_type=p[1] if p else None, clients=S.clients(c), articles=arts, index=index,
                     montants=montants,
                     source_commande=surligner(d["texte_commande"], cit_cmd),
                     source_livraison=surligner(d["texte_livraison"] or "", cit_bl),
@@ -375,6 +628,7 @@ async def revue(request: Request, did: int):
 @app.post("/dossiers/{did}/corriger")
 async def corriger(request: Request, did: int):
     async def f(c, u, form):
+        S.verifier_acces_dossier(c, u, did)
         champs = {k: v for k, v in form.items() if k not in ("csrf", "version")}
         S.corriger(c, u, did, int(form["version"]), champs)
     return await action(request, f"/dossiers/{did}", f"/dossiers/{did}", f, "Modifications enregistrées.")
@@ -383,6 +637,7 @@ async def corriger(request: Request, did: int):
 @app.post("/dossiers/{did}/livraison")
 async def livraison(request: Request, did: int):
     async def f(c, u, form):
+        S.verifier_acces_dossier(c, u, did)
         if not form.get("texte_livraison", "").strip():
             raise S.Refus("Collez le texte du bon de livraison.")
         S.ajouter_livraison(c, u, did, int(form["version"]), form["texte_livraison"], form.get("extracteur", "regles"))
@@ -396,6 +651,14 @@ async def decider(request: Request, did: int):
     return await action(request, f"/dossiers/{did}", f"/dossiers/{did}", f, "Décision enregistrée.")
 
 
+@app.post("/dossiers/{did}/remise")
+async def remise(request: Request, did: int):
+    async def f(c, u, form):
+        S.accorder_remise(c, u, did, int(form.get("version", "0")), form.get("type", ""), form.get("valeur", ""),
+                          form.get("motif", ""))
+    return await action(request, f"/dossiers/{did}", f"/dossiers/{did}", f, "Remise accordée.")
+
+
 @app.post("/dossiers/{did}/valider")
 async def valider(request: Request, did: int):
     async def f(c, u, form):
@@ -407,6 +670,7 @@ async def valider(request: Request, did: int):
 @app.post("/dossiers/{did}/supprimer")
 async def supprimer(request: Request, did: int):
     async def f(c, u, form):
+        S.verifier_acces_dossier(c, u, did)
         S.supprimer_dossier(c, u, did, int(form["version"]))
     return await action(request, "/", f"/dossiers/{did}", f, "Brouillon supprimé.")
 
@@ -414,6 +678,7 @@ async def supprimer(request: Request, did: int):
 @app.post("/dossiers/{did}/proforma")
 async def proforma(request: Request, did: int):
     async def f(c, u, form):
+        S.verifier_acces_dossier(c, u, did)
         return S.creer_proforma(c, u, did)
     return await action(request, lambda pid: f"/proformas/{pid}/pdf", f"/dossiers/{did}", f)
 
@@ -424,6 +689,7 @@ async def proforma_pdf(request: Request, pid: int):
         r = c.execute("SELECT * FROM proformas WHERE id = ?", (pid,)).fetchone()
         if not r:
             raise S.Refus("Pro forma introuvable.")
+        S.verifier_acces_dossier(c, u, r["dossier_id"])
         return Response(generer(json.loads(r["contenu"])), media_type="application/pdf",
                         headers={"Content-Disposition": f'inline; filename="{r["numero"]}.pdf"'})
     return await avec_utilisateur(vue)(request)
@@ -435,6 +701,8 @@ async def proforma_pdf(request: Request, pid: int):
 async def factures(request: Request):
     async def vue(request, c, u):
         liste = [dict(r, contenu=json.loads(r["contenu"])) for r in c.execute("SELECT * FROM factures ORDER BY id DESC")]
+        visibles, origines = S.dossiers_visibles(c, u), _origines(c)
+        liste = [f for f in liste if S.facture_visible(f, visibles, origines)]
         return page(request, "factures.html", c, u, factures=liste)
     return await avec_utilisateur(vue)(request)
 
@@ -442,6 +710,7 @@ async def factures(request: Request):
 @app.get("/factures/{fid}", response_class=HTMLResponse)
 async def facture(request: Request, fid: int):
     async def vue(request, c, u):
+        S.verifier_acces_facture(c, u, fid)
         f = S.facture(c, fid)
         origine = S.facture(c, f["facture_origine_id"]) if f.get("facture_origine_id") else None
         cl = S.client(c, f["contenu"]["client"].get("id")) or {}
@@ -453,6 +722,7 @@ async def facture(request: Request, fid: int):
 @app.get("/factures/{fid}/pdf")
 async def facture_pdf(request: Request, fid: int, copie: int = 0):
     async def vue(request, c, u):
+        S.verifier_acces_facture(c, u, fid)
         f = S.facture(c, fid)
         pdf = generer(f["contenu"], f if f["code_dgi"] else None, copie=bool(copie))
         if copie:
@@ -490,6 +760,7 @@ async def avoir(request: Request, fid: int):
 @app.post("/factures/{fid}/envoyer")
 async def envoyer(request: Request, fid: int):
     async def f(c, u, form):
+        S.verifier_acces_facture(c, u, fid)
         S.envoyer_facture(c, u, fid, form.get("canal", ""), form.get("destinataire", ""))
     return await action(request, f"/factures/{fid}", f"/factures/{fid}", f, "Facture envoyée au client (simulé).")
 
@@ -497,6 +768,7 @@ async def envoyer(request: Request, fid: int):
 @app.post("/factures/{fid}/rectifier")
 async def rectifier(request: Request, fid: int):
     async def f(c, u, form):
+        S.verifier_acces_facture(c, u, fid)
         return S.creer_rectificative(c, u, fid)
     return await action(request, lambda did: f"/dossiers/{did}", f"/factures/{fid}", f,
                         "Brouillon de la facture rectificative : corrigez-le, puis validez.")
@@ -505,6 +777,7 @@ async def rectifier(request: Request, fid: int):
 @app.post("/factures/{fid}/accuse")
 async def accuse(request: Request, fid: int):
     async def f(c, u, form):
+        S.verifier_acces_facture(c, u, fid)
         S.accuser_reception(c, u, fid, form.get("canal", "WHATSAPP"))
     return await action(request, f"/factures/{fid}", f"/factures/{fid}", f, "Accusé de réception enregistré (simulé).")
 
@@ -570,6 +843,17 @@ ACTIONS_JOURNAL = {
     "COPIE_IMPRIMEE": ("a imprimé une copie", "ventes", "pdf"),
     "FACTURE_ENVOYEE": ("a envoyé une facture au client (simulé)", "ventes", "envoyer"),
     "RECTIFICATIVE_PREPAREE": ("a préparé une facture rectificative", "ventes", "brouillon"),
+    "CANAL_REFUSE": ("a écrit au bot depuis un numéro non autorisé : refusé", "connexions", "alerte"),
+    "ESPACE_CREE": ("a créé l'espace de l'entreprise", "administration", "gestion"),
+    "REMISE_ACCORDEE": ("a accordé une remise", "ventes", "coche"),
+    "ARTICLE_CREE": ("a ajouté un article", "administration", "gestion"),
+    "CLIENT_CREE": ("a ajouté un client", "administration", "gestion"),
+    "ROLES_RENOMMES": ("a renommé les rôles", "administration", "gestion"),
+    "UTILISATEUR_CREE": ("a créé un compte", "administration", "gestion"),
+    "CANAUX_MODIFIES": ("a modifié les canaux de messagerie", "administration", "gestion"),
+    "NUMERO_HABILITE": ("a habilité un numéro de téléphone", "administration", "gestion"),
+    "NUMERO_RETIRE": ("a retiré un numéro de téléphone", "administration", "gestion"),
+    "NOTE_VOCALE_TRANSCRITE": ("a dicté une commande au micro", "ventes", "brouillon"),
     "ACCUSE_CLIENT": ("a enregistré l'accusé de réception du client", "ventes", "coche"),
     "PAIEMENT_ENREGISTRE": ("a enregistré un paiement", "paiements", "argent"),
     "CLIENT_MODIFIE": ("a modifié une fiche client", "administration", "gestion"),
@@ -594,6 +878,7 @@ def _jour_long(iso: str) -> str:
 @app.get("/journal", response_class=HTMLResponse)
 async def journal(request: Request, verifier: int = 0, categorie: str = "", acteur: str = ""):
     async def vue(request, c, u):
+        S.exiger(u, "journal.lire")
         noms = {r["id"]: r["nom"] for r in c.execute("SELECT id, nom FROM utilisateurs")}
         numeros = {str(r["id"]): r["numero"] for r in c.execute("SELECT id, numero FROM factures")}
         lignes = []
@@ -634,15 +919,75 @@ async def journal(request: Request, verifier: int = 0, categorie: str = "", acte
 @app.get("/referentiels", response_class=HTMLResponse)
 async def referentiels(request: Request):
     async def vue(request, c, u):
-        return page(request, "referentiels.html", c, u, clients=S.clients(c), articles=S.articles(c))
+        return page(request, "referentiels.html", c, u, clients=S.clients(c), articles=S.articles(c),
+                    types_clients=TYPES_CLIENTS)
     return await avec_utilisateur(vue)(request)
+
+
+def _entier(valeur, message: str) -> int:
+    try:
+        return int(str(valeur or "").replace(" ", "").replace("\u202f", ""))
+    except ValueError:
+        raise S.Refus(message)
+
+
+def _alias(texte: str, extra: str = "") -> list[str]:
+    """Mots-clés reconnus dans les messages : le nom complet, son premier mot et ceux saisis à la main."""
+    from .texte import normaliser
+    base = [texte.strip().lower(), normaliser(texte).split(" ")[0]] + [a.strip().lower() for a in extra.split(",")]
+    return sorted({a for a in base if len(a) >= 3})
+
+
+@app.post("/referentiels/article")
+async def ajouter_article(request: Request):
+    async def f(c, u, form):
+        S.exiger(u, "referentiel.ecrire")
+        designation, unite = form.get("designation", "").strip()[:80], form.get("unite", "").strip()[:20] or "unité"
+        groupe, prix = form.get("groupe_taxe"), _entier(form.get("prix_unitaire_ttc"), "Prix invalide.")
+        if len(designation) < 2 or groupe not in ("A", "B", "C", "D", "E") or prix <= 0:
+            raise S.Refus("Désignation, groupe ou prix invalide.")
+        n = c.execute("SELECT COUNT(*) FROM articles").fetchone()[0] + 1
+        while c.execute("SELECT 1 FROM articles WHERE id = ?", (f"A-{n:03d}",)).fetchone():
+            n += 1
+        aid = f"A-{n:03d}"
+        with transaction(c):
+            c.execute("INSERT INTO articles VALUES (?,?,?,?,?,?,?)", (aid, designation, json.dumps(
+                _alias(designation, form.get("alias", "")), ensure_ascii=False), unite, prix, groupe,
+                int(bool(form.get("quantite_decimale")))))
+            journaliser(c, u["id"], "ARTICLE_CREE", f"article:{aid}", {"designation": designation, "prix": prix,
+                                                                       "groupe_taxe": groupe})
+    return await action(request, "/referentiels", "/referentiels", f, "Article ajouté.")
+
+
+@app.post("/referentiels/client")
+async def ajouter_client(request: Request):
+    async def f(c, u, form):
+        S.exiger(u, "referentiel.ecrire")
+        nom, ifu = form.get("nom", "").strip()[:80], re.sub(r"\s", "", form.get("ifu", ""))
+        aib, type_c = _entier(form.get("aib_taux", "0"), "AIB invalide."), form.get("type", "PARTICULIER")
+        if len(nom) < 2 or aib not in (0, 1, 5) or type_c not in TYPES_CLIENTS or (ifu and not re.fullmatch(r"\d{13}", ifu)):
+            raise S.Refus("Nom, IFU (13 chiffres), type ou AIB invalide.")
+        n = c.execute("SELECT COUNT(*) FROM clients").fetchone()[0] + 1
+        while c.execute("SELECT 1 FROM clients WHERE id = ?", (f"C-{n:03d}",)).fetchone():
+            n += 1
+        cid = f"C-{n:03d}"
+        with transaction(c):
+            c.execute("INSERT INTO clients VALUES (?,?,?,?,?,?,?,?,?)", (cid, nom, json.dumps(
+                _alias(nom, form.get("alias", "")), ensure_ascii=False), type_c, ifu or None,
+                form.get("adresse", "").strip()[:120] or None, form.get("telephone", "").strip()[:30] or None, aib, 0))
+            journaliser(c, u["id"], "CLIENT_CREE", f"client:{cid}", {"nom": nom, "aib_taux": aib})
+    return await action(request, "/referentiels", "/referentiels", f, "Client ajouté.")
+
+
+TYPES_CLIENTS = {"PARTICULIER": "Particulier", "ENTREPRISE_TPS": "Entreprise (TPS)", "ENTREPRISE_REEL": "Entreprise (réel)",
+                 "STRUCTURE_ETAT": "Structure de l'État", "CLIENT_EXPORT": "Client à l'export"}
 
 
 @app.post("/referentiels/article/{aid}")
 async def maj_article(request: Request, aid: str):
     async def f(c, u, form):
         S.exiger(u, "referentiel.ecrire")
-        groupe, prix = form.get("groupe_taxe"), int(form.get("prix_unitaire_ttc", "0"))
+        groupe, prix = form.get("groupe_taxe"), _entier(form.get("prix_unitaire_ttc", "0"), "Prix invalide.")
         if groupe not in ("A", "B", "C", "D", "E") or prix <= 0:
             raise S.Refus("Groupe ou prix invalide.")
         with transaction(c):
@@ -671,9 +1016,64 @@ async def maj_client(request: Request, cid: str):
 async def parametres(request: Request):
     async def vue(request, c, u):
         S.exiger(u, "parametres.ecrire")
+        cfg = canaux.config(c)
+        numeros = {h["id"]: h["numero"] for h in canaux.habilites(c)}
         return page(request, "parametres.html", c, u, mode_solo=lire_parametre(c, "mode_solo", False),
-                    gemini=bool(os.environ.get("GEMINI_API_KEY")), groq=bool(os.environ.get("GROQ_API_KEY")))
+                    gemini=bool(os.environ.get("GEMINI_API_KEY")), groq=bool(os.environ.get("GROQ_API_KEY")),
+                    comptes=S.utilisateurs(c), numeros=numeros, canaux_cfg=cfg, roles_comptes=S.ROLES_COMPTES)
     return await avec_utilisateur(vue)(request)
+
+
+@app.post("/parametres/utilisateurs")
+async def parametres_utilisateur(request: Request):
+    async def f(c, u, form):
+        S.creer_utilisateur(c, u, form.get("nom", ""), form.get("login", ""), form.get("role", ""),
+                            form.get("mot_de_passe", ""))
+    return await action(request, "/parametres#canaux", "/parametres#canaux", f, "Compte créé.")
+
+
+@app.post("/parametres/roles")
+async def parametres_roles(request: Request):
+    async def f(c, u, form):
+        S.exiger(u, "parametres.ecrire")
+        libelles = {}
+        for role, defaut in S.LIBELLES_ROLES_DEFAUT.items():
+            v = re.sub(r"\s+", " ", str(form.get(role, "")).strip())[:30]
+            libelles[role] = v if len(v) >= 2 else defaut
+        with transaction(c):
+            ecrire_parametre(c, "libelles_roles", libelles)
+            journaliser(c, u["id"], "ROLES_RENOMMES", "entreprise", libelles)
+    return await action(request, "/parametres#canaux", "/parametres#canaux", f, "Noms des rôles enregistrés.")
+
+
+@app.post("/parametres/numeros")
+async def parametres_numero(request: Request):
+    async def f(c, u, form):
+        if form.get("retirer"):
+            canaux.retirer_habilitation(c, u, form.get("numero", ""))
+        else:
+            canaux.enregistrer_habilitation(c, u, form.get("numero", ""), form.get("uid", ""))
+    return await action(request, "/parametres#canaux", "/parametres#canaux", f, "Numéros mis à jour.")
+
+
+@app.post("/parametres/canaux")
+async def parametres_canaux(request: Request):
+    async def f(c, u, form):
+        S.exiger(u, "parametres.ecrire")
+        cfg = canaux.config(c)
+        numero = canaux.normaliser_numero(form.get("numero_entreprise", ""))
+        if numero and not 8 <= len(numero) <= 15:
+            raise S.Refus("Numéro WhatsApp de l'entreprise invalide.")
+        bot = (form.get("bot_telegram", "") or "").strip()[:40]
+        if bot and not re.fullmatch(r"@[A-Za-z0-9_]{4,32}", bot):
+            raise S.Refus("Nom du bot Telegram : @ suivi de lettres, chiffres ou _.")
+        cfg.setdefault("whatsapp", {})["numero_entreprise"] = canaux.affichage(numero) if numero else ""
+        cfg.setdefault("telegram", {"habilites": []})["bot"] = bot
+        with transaction(c):
+            ecrire_parametre(c, "canaux", cfg)
+            journaliser(c, u["id"], "CANAUX_MODIFIES", "canaux", {"whatsapp": cfg["whatsapp"]["numero_entreprise"],
+                                                                  "telegram": bot})
+    return await action(request, "/parametres#canaux", "/parametres#canaux", f, "Canaux enregistrés.")
 
 
 @app.post("/parametres")

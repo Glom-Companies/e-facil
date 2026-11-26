@@ -102,7 +102,7 @@ def test_groq_ne_lit_pas_les_photos():
 def test_ia_disponibles_selon_les_cles(monkeypatch):
     monkeypatch.setenv("GEMINI_API_KEY", "x")
     monkeypatch.setenv("GROQ_API_KEY", "y")
-    assert E.ia_disponibles() == ["gemini", "groq"]
+    assert E.ia_disponibles() == ["groq", "gemini"]
     monkeypatch.delenv("GEMINI_API_KEY")
     monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
     assert E.ia_disponibles() == ["groq"]

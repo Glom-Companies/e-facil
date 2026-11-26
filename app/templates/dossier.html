@@ -199,6 +199,24 @@
         </form>
         <p class="small text-secondary mt-2 mb-3">{% if bloquantes %}Tranchez d'abord les contrôles bloquants.{% else %}Après validation, la facture ne pourra plus être modifiée ; une correction passera par un {{ aide('avoir') }}.{% endif %}</p>
         {% else %}<p class="small text-secondary">La validation est réservée au responsable.</p>{% endif %}
+        {% for r in br.remises_accordees or [] %}
+        <p class="small mb-1 text-start">Remise accordée : {% if r.type == 'MONTANT' %}{{ r.valeur|int|fcfa }}{% else %}{{ '%g'|format(r.valeur) }} %{% endif %} · {{ r.motif }}</p>
+        {% endfor %}
+        {% if decideur %}
+        <details class="mb-3 text-start">
+          <summary class="small fw-bold" style="cursor:pointer">Accorder une remise</summary>
+          <form method="post" action="/dossiers/{{ d.id }}/remise" class="mt-2">
+            <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="version" value="{{ d.version }}">
+            <div class="d-flex gap-2 mb-2">
+              <input class="form-control form-control-sm text-end" name="valeur" inputmode="decimal" placeholder="Valeur" aria-label="Valeur de la remise" required>
+              <select class="form-select form-select-sm" name="type" aria-label="Type de remise" style="max-width:6.5rem"><option value="POURCENTAGE">%</option><option value="MONTANT">F</option></select>
+            </div>
+            <input class="form-control form-control-sm mb-2" name="motif" placeholder="Motif (ex. client fidèle)" aria-label="Motif" required>
+            <button class="btn btn-sm btn-contour-vert w-100" type="submit">Accorder</button>
+            <p class="small text-secondary mt-1 mb-0">Les remises s'appliquent l'une après l'autre.</p>
+          </form>
+        </details>
+        {% endif %}
         <div class="actions justify-content-center">
           <form method="post" action="/dossiers/{{ d.id }}/proforma"><input type="hidden" name="csrf" value="{{ csrf }}">
             <button class="btn btn-sm btn-blanc" type="submit" {% if not d.totaux %}disabled{% endif %}>Produire une&nbsp;{{ aide('proforma', 'pro forma') }}</button></form>
@@ -262,7 +280,14 @@
       <div class="card-body">
         <pre class="source">{{ source_commande }}</pre>
         <p class="small text-secondary mt-2 mb-0">Passages surlignés : ce que la lecture a utilisé. Le texte d'origine est conservé tel quel.</p>
-        {% if d.piece_jointe %}<p class="small mt-1 mb-0">Document joint : <span class="mono">{{ d.piece_jointe }}</span> (texte transcrit ci-dessus)</p>{% endif %}
+        {% if piece_type %}
+        <div class="piece-source">
+          {% if piece_type.startswith('image/') %}<a href="/dossiers/{{ d.id }}/piece" target="_blank" rel="noopener"><img src="/dossiers/{{ d.id }}/piece" alt="Document d'origine reçu du client"></a>
+          {% elif piece_type == 'application/pdf' %}<iframe src="/dossiers/{{ d.id }}/piece" title="PDF d'origine reçu du client"></iframe>
+          {% elif piece_type.startswith('audio/') %}<audio controls preload="none" src="/dossiers/{{ d.id }}/piece"></audio>{% endif %}
+          <div class="legende"><span>{% if piece_type.startswith('audio/') %}Note vocale d'origine{% else %}Document d'origine{% endif %}{% if d.piece_jointe %} · <span class="mono">{{ d.piece_jointe }}</span>{% endif %}</span><a href="/dossiers/{{ d.id }}/piece" target="_blank" rel="noopener">Ouvrir</a></div>
+        </div>
+        {% elif d.piece_jointe %}<p class="small mt-1 mb-0">Document joint : <span class="mono">{{ d.piece_jointe }}</span> (texte transcrit ci-dessus)</p>{% endif %}
       </div>
     </div>
     <div class="card">

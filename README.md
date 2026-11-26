@@ -53,6 +53,15 @@ Vérifiez vos clés en un appel : `.venv/bin/python -m eval.verifier_ia`.
 
 En option, un modèle local avec Ollama : `ollama pull qwen2.5:7b`, puis choisissez « IA locale ». Aucune donnée ne quitte alors la machine.
 
+## Canaux, voix et espaces d'entreprise
+
+- **Choix de l'IA côté serveur** : Groq d'abord, puis Gemini, puis le modèle local s'il est activé (`IA_ORDRE`). Une photo ou un PDF va directement à Gemini. L'utilisateur ne choisit plus de modèle.
+- **Dictée** : sur « Nouvelle commande », le bouton « Dicter » enregistre au micro ; la note est transcrite (Groq Whisper, puis Gemini) et le texte, à relire, devient la commande.
+- **Pièce d'origine** : la photo, le PDF ou la note vocale reçus sont conservés et affichés sur l'écran de revue.
+- **WhatsApp (simulé)** : menu « WhatsApp (simulé) » (responsable, admin). Le téléphone simulé envoie texte, note vocale, photo ou PDF au numéro de l'entreprise. Les messages suivent le format de l'API WhatsApp Cloud de Meta et sont signés (HMAC-SHA256) avant d'arriver au webhook `/webhook/whatsapp`, comme en production. Le bot ne répond qu'aux **numéros habilités** par l'administrateur, avec les droits du compte rattaché : la vendeuse envoie la commande et reçoit le brouillon ; le responsable reçoit l'alerte, répond `VALIDER 12`, reçoit la facture en PDF, puis `ENVOYER 12` l'envoie au client. Un numéro inconnu est refusé et journalisé.
+- **Inscription** : `/inscription` crée l'espace d'une nouvelle entreprise, avec **sa propre base** (aucune donnée partagée). La taille déclarée règle le fonctionnement : une micro-entreprise passe en mode solo. L'administrateur crée ensuite les comptes, habilite les numéros, renseigne le numéro WhatsApp et le bot Telegram (simulés), puis ajoute clients et articles.
+- **Remises en cascade** : le responsable peut accorder plusieurs remises (pourcentage ou montant) ; chacune s'applique au montant restant.
+
 ## Scénario de démonstration (5 minutes)
 
 **Jeu de démonstration.** Pour repartir d'une base réaliste (5 factures émises sur les 5 derniers jours, des paiements, 5 commandes du jour à vérifier) : `python -m app.demo`, ou, connecté en `admin`, « Paramètres » puis « Charger la démonstration ». La lecture se fait par règles simples : le résultat est identique à chaque fois et ne consomme aucun quota d'IA.
@@ -76,7 +85,7 @@ En option, un modèle local avec Ollama : `ollama pull qwen2.5:7b`, puis choisis
 .\.venv\Scripts\python -m pytest -q
 ```
 
-Les 68 tests couvrent :
+Les 70 tests couvrent :
 - les **exemples officiels de la DGI** (2 320 F donnent 1 966 + 354 ; 3 × 1 340 F donnent 3 407 + 613) et une facture réelle observée (groupe E, AIB 1 %) ;
 - des **tests de propriétés** (Hypothesis) sur les calculs ;
 - les **scénarios de recette** du cahier des charges : validations concurrentes, idempotence, immutabilité jusque dans la base, avoirs, reprise après coupure, journal falsifié, consigne suspecte, citation inventée ;
@@ -132,6 +141,12 @@ tests/           tests automatisés
 | Mention SIMULATION ; aucun logo officiel | Choix |
 
 Paramètres modifiables : seuil de prix inhabituel (15 %), fenêtre de doublon (72 h), arrondi par groupe ou par ligne.
+
+## Perspectives
+
+- Langues nationales : commandes dictées en fon, yoruba, goun, mina, dendi ou bariba. Whisper reconnaît le yoruba ; le fon et les autres langues demandent un modèle entraîné sur des enregistrements locaux.
+- Connexion réelle à l'API WhatsApp Cloud et à Telegram, avec un webhook par espace (aiguillage par numéro de l'entreprise).
+- Homologation du logiciel et connexion réelle à e-MECeF.
 
 ## Limites connues
 

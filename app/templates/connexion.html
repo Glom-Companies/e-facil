@@ -32,7 +32,7 @@
         </ul>
       </div>
     </div>
-    <p class="visuel-legende">L'IA lit le message, le code calcule et contrôle, vous décidez.</p>
+    <p class="visuel-legende">Lecture automatique des commandes, calcul conforme aux règles de la DGI, validation par vos soins.</p>
   </section>
 
   <!-- Formulaire -->
@@ -47,6 +47,13 @@
 
       <form method="post" action="/connexion" autocomplete="off">
         <input type="hidden" name="csrf" value="{{ csrf }}">
+        {% if espaces %}
+        <label class="lib-champ" for="espace">Entreprise</label>
+        <select class="champ" id="espace" name="espace">
+          <option value="">{{ entreprise.raison_sociale }} (démonstration)</option>
+          {% for e in espaces %}<option value="{{ e.slug }}">{{ e.nom }}</option>{% endfor %}
+        </select>
+        {% endif %}
         <label class="lib-champ" for="login">Identifiant</label>
         <input class="champ" id="login" name="login" required autofocus placeholder="ex. aicha">
         <label class="lib-champ" for="mdp">Mot de passe</label>
@@ -67,6 +74,7 @@
         <button type="submit" class="compte" name="login" value="{{ c.login }}"><strong>{{ c.nom }}</strong><span>{{ ROLES[c.role] }}</span></button>
         {% endfor %}
       </form>
+      <p class="lien-inscription">Nouvelle entreprise ? <a href="/inscription">Créer votre espace</a></p>
       <p class="mention-connexion">Prototype BWAI'2026 · données fictives · émission DGI simulée · aucune valeur fiscale</p>
     </div>
   </section>

@@ -4,7 +4,9 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import sqlite3
+from contextvars import ContextVar
 from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
@@ -75,6 +77,12 @@ CREATE TABLE IF NOT EXISTS paiements (
   mode TEXT NOT NULL, reference TEXT, recu_numero TEXT UNIQUE NOT NULL,
   enregistre_par TEXT NOT NULL, enregistre_le TEXT NOT NULL);
 
+-- Messages des canaux (WhatsApp simulé, Telegram simulé) : entrants et réponses du bot.
+CREATE TABLE IF NOT EXISTS messages_canal (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, message_id TEXT UNIQUE, plateforme TEXT NOT NULL, numero TEXT NOT NULL,
+  sens TEXT NOT NULL CHECK (sens IN ('entrant','sortant')), type TEXT NOT NULL, texte TEXT, media TEXT,
+  dossier_id INTEGER, facture_id INTEGER, horodatage TEXT NOT NULL);
+
 -- Une facture validée ne change plus (OHADA art. 20 et 22).
 CREATE TRIGGER IF NOT EXISTS facture_contenu_immuable
 BEFORE UPDATE OF type, numero, dossier_id, facture_origine_id, contenu, total_ttc, net_a_payer,
@@ -112,8 +120,30 @@ def maintenant() -> str:
     return datetime.now().isoformat(timespec="seconds")
 
 
+# Espace d'entreprise de la requête en cours (une base SQLite par entreprise : aucune donnée partagée).
+# Vide = la base de démonstration (CHEMIN_BASE).
+ESPACE: ContextVar[str | None] = ContextVar("espace", default=None)
+
+
+def chemin_espace(slug: str) -> Path:
+    if not re.fullmatch(r"[a-z0-9-]{3,48}", slug or ""):
+        raise ValueError("Espace invalide")
+    return Path(CHEMIN_BASE).parent / "espaces" / f"{slug}.db"
+
+
+def chemin_courant() -> Path:
+    slug = ESPACE.get()
+    return chemin_espace(slug) if slug else Path(CHEMIN_BASE)
+
+
+def dossier_donnees(nom: str) -> Path:
+    """Dossier de fichiers (pièces, médias) propre à l'espace courant."""
+    base = chemin_courant()
+    return base.parent / (nom if base == Path(CHEMIN_BASE) else f"{base.stem}_{nom}")
+
+
 def connecter(chemin: Path | str | None = None) -> sqlite3.Connection:
-    chemin = Path(chemin or CHEMIN_BASE)
+    chemin = Path(chemin or chemin_courant())
     chemin.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(chemin, isolation_level=None, timeout=10, check_same_thread=False)
     conn.row_factory = sqlite3.Row

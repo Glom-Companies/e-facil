@@ -78,12 +78,19 @@ def lire_montant(texte: str | None) -> int | None:
     total, courant = 0, 0
     trouve = False
     for mot in mots:
-        if mot in NOMBRES_EN_LETTRES:
+        if mot in ("cent", "cents"):  # « cinq cents » = 5 × 100, « cent » seul = 100
+            courant = max(courant, 1) * 100
+            trouve = True
+        elif mot in ("vingt", "vingts") and courant % 100 == 4:  # « quatre-vingt(s) » = 80
+            courant += 76
+            trouve = True
+        elif mot in NOMBRES_EN_LETTRES:
             courant += NOMBRES_EN_LETTRES[mot]
             trouve = True
-        elif mot == "mille" and trouve:
+        elif mot == "mille":  # « mille cinq cents » = 1 500
             total += max(courant, 1) * 1000
             courant = 0
+            trouve = True
     return (total + courant) if trouve else None
 
 

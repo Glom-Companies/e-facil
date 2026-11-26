@@ -24,6 +24,8 @@
       </div>
       <div class="card-header"><h2 class="card-title">Règles</h2></div>
       <div class="card-body">
+        <label class="form-label" for="taux_tva">Taux de TVA (%)</label>
+        <input class="form-control mb-3" id="taux_tva" name="taux_tva" value="{{ p.taux_tva or 18 }}" inputmode="decimal" style="max-width:8rem">
         <label class="form-label">Arrondi de la TVA</label>
         <label class="form-check"><input class="form-check-input" type="radio" name="mode_arrondi" value="groupe" {% if p.mode_arrondi != 'ligne' %}checked{% endif %}> <span class="form-check-label">Par groupe de taxe (recommandé, comme e-MECeF)</span></label>
         <label class="form-check"><input class="form-check-input" type="radio" name="mode_arrondi" value="ligne" {% if p.mode_arrondi == 'ligne' %}checked{% endif %}> <span class="form-check-label">Par ligne</span></label>

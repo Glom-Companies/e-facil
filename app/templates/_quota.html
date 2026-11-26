@@ -1,0 +1,35 @@
+{# Fenêtre affichée quand toutes les IA gratuites ont épuisé leur quota (Gemini et Groq, tous modèles). #}
+<dialog id="fenetre-quota" class="fenetre-quota" aria-labelledby="quota-titre">
+  <div class="fq-icone" aria-hidden="true">
+    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>
+  </div>
+  <h2 id="quota-titre">Quota gratuit de l'IA épuisé</h2>
+  <p>Gemini et Groq ont atteint leur limite gratuite sur tous les modèles.</p>
+  {% if repli_regles %}<p class="fq-note">Le message a été lu par les règles simples. Vérifiez chaque champ.</p>
+  {% else %}<p class="fq-note">Réessayez dans quelques minutes, ou choisissez « Règles simples ».</p>{% endif %}
+  <form method="dialog"><button class="fq-bouton" autofocus>Compris</button></form>
+</dialog>
+<style>
+.fenetre-quota{border:0;border-radius:16px;padding:1.75rem 1.75rem 1.5rem;max-width:min(420px,calc(100vw - 32px));
+  text-align:center;box-shadow:0 24px 60px rgba(25,28,31,.25);color:#191c1f;background:#fff;opacity:1}
+.fenetre-quota::backdrop{background:rgba(25,28,31,.45);backdrop-filter:blur(2px)}
+.fenetre-quota[open]{animation:fq-entree .18s ease-out}
+@keyframes fq-entree{from{opacity:0;transform:translateY(8px) scale(.98)}to{opacity:1;transform:none}}
+.fq-icone{width:56px;height:56px;border-radius:50%;margin:0 auto .9rem;display:grid;place-items:center;
+  background:#fff4e0;color:#b45309}
+.fenetre-quota h2{font-size:1.15rem;font-weight:700;margin:0 0 .5rem}
+.fenetre-quota p{margin:0 0 .4rem;color:#4b5563}
+.fenetre-quota .fq-note{font-size:.9rem}
+.fq-bouton{margin-top:1rem;width:100%;border:0;border-radius:10px;padding:.7rem 1rem;font-weight:600;
+  background:#1f9184;color:#fff;cursor:pointer}
+.fq-bouton:hover{background:#18766b}
+@media (prefers-reduced-motion:reduce){.fenetre-quota[open]{animation:none}}
+</style>
+<script>
+(function () {
+  var f = document.getElementById('fenetre-quota');
+  var cle = 'quota-vu:' + location.pathname + ':{{ cle_quota|default("") }}';
+  try { if (sessionStorage.getItem(cle)) return; sessionStorage.setItem(cle, '1'); } catch (e) {}
+  if (f && f.showModal) f.showModal();
+})();
+</script>

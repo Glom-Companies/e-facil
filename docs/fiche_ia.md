@@ -55,7 +55,7 @@ Intervalles de confiance de Wilson à 95 %.
 
 ### 5.1 Résultats métier (indépendants de l'IA)
 
-- **74 tests automatisés, tous verts.** Les exemples officiels de la DGI sont reproduits au franc près ; les validations concurrentes, l'idempotence, l'immutabilité, la reprise après coupure et la détection d'un journal falsifié sont prouvées.
+- **75 tests automatisés, tous verts.** Les exemples officiels de la DGI sont reproduits au franc près ; les validations concurrentes, l'idempotence, l'immutabilité, la reprise après coupure et la détection d'un journal falsifié sont prouvées.
 - Ces résultats sont les mêmes avec ou sans IA : l'IA ne touche pas aux calculs.
 
 ### 5.2 Résultats de l'IA

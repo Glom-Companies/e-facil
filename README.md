@@ -98,7 +98,7 @@ En option, un modèle local avec Ollama : `ollama pull qwen2.5:7b`, puis choisis
 .\.venv\Scripts\python -m pytest -q
 ```
 
-Les 74 tests couvrent :
+Les 75 tests couvrent :
 - les **exemples officiels de la DGI** (2 320 F donnent 1 966 + 354 ; 3 × 1 340 F donnent 3 407 + 613) et une facture réelle observée (groupe E, AIB 1 %) ;
 - des **tests de propriétés** (Hypothesis) sur les calculs ;
 - les **scénarios de recette** du cahier des charges : validations concurrentes, idempotence, immutabilité jusque dans la base, avoirs, reprise après coupure, journal falsifié, consigne suspecte, citation inventée ;

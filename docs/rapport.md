@@ -60,13 +60,13 @@ Les seuils (15 %, 72 h), le taux de TVA et le mode d'arrondi sont paramétrables
 
 ### 5.1 Fiabilité métier (sans IA)
 
-**74 tests automatisés, tous verts** (`python -m pytest -q`), sans aucun appel à une IA réelle :
+**75 tests automatisés, tous verts** (`python -m pytest -q`), sans aucun appel à une IA réelle :
 
 | Domaine | Tests | Ce qui est prouvé |
 |---|---|---|
 | Moteur de calcul | 18 | Exemples officiels de la DGI reproduits au franc près (2 320 F → 1 966 + 354 ; 3 × 1 340 F → 3 407 + 613), facture réelle observée, tests de propriétés (Hypothesis) |
 | Scénarios de recette | 20 | Validations concurrentes, idempotence, immutabilité dans la base, avoirs plafonnés, reprise après coupure, journal falsifié détecté, consigne suspecte, citation inventée écartée, jeu de démonstration rejouable, comptes en T équilibrés |
-| Interface web | 10 | Parcours complet, protection CSRF, droits par rôle, recherche, journal |
+| Interface web | 11 | Parcours complet, protection CSRF, droits par rôle, recherche, journal |
 | Lecture par IA | 22 | Quotas, surcharge, JSON invalide, modèle de secours, repli d'une IA à l'autre puis sur les règles |
 | Canal WhatsApp | 4 | Signature, numéros habilités, rejeu, parcours guidé complet jusqu'au paiement |
 

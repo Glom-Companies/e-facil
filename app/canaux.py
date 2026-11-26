@@ -45,7 +45,7 @@ AIDE = ("e-FACIL · facturer par message\n"
         "Envoyez la commande du client (texte, note vocale, photo ou PDF) : je vous pose les questions "
         "une par une jusqu'à la facture. Répondez par le numéro du choix, une quantité ou un nom.\n"
         "• STOP : mettre le dossier de côté · REPRENDRE 12 : y revenir · LISTE : brouillons en attente\n"
-        "• BL 12 : 10 cartons… → rattacher la livraison\n"
+        "• BL 12 : 10 cartons livrés… ou ASF 12 : prestation réalisée… → rattacher la pièce\n"
         "Raccourcis : VOIR 12 · VALIDER 12 · ENVOYER 12 · PDF 12 · PAYE 12 50000 momo · ANNULER 12")
 
 # Commande -> (code d'anomalie, choix) pour les décisions du responsable.
@@ -275,13 +275,13 @@ def _executer(conn, plateforme, numero, u, type_msg, texte, contenu) -> None:
             {"valider": _valider, "ok": _valider, "annuler": _annuler, "envoyer": _envoyer}[m.group(1).lower()](
                 conn, plateforme, numero, u, int(m.group(2)))
             return
-        m = re.fullmatch(r"(?is)(?:bl|livraison)\s*n?°?\s*(\d+)\s*[:\-]?\s*(.+)", commande)
+        m = re.fullmatch(r"(?is)(?:bl|livraison|asf|attestation)\s*n?°?\s*(\d+)\s*[:\-]?\s*(.+)", commande)
         if m:
             did = int(m.group(1))
             S.verifier_acces_dossier(conn, u, did)
             d = S.dossier(conn, did)
             S.ajouter_livraison(conn, u, did, d["version"], m.group(2).strip(), S.extracteur_auto(False))
-            _annoncer(conn, plateforme, numero, did, "Livraison rattachée au dossier", suite=False)
+            _annoncer(conn, plateforme, numero, did, "Pièce d'exécution rattachée au dossier", suite=False)
             guider(conn, plateforme, numero, u, did)
             return
         session = _session(conn, plateforme, numero)

@@ -19,7 +19,8 @@ from markupsafe import Markup, escape
 from starlette.middleware.sessions import SessionMiddleware
 
 from . import services as S
-from .brouillon import LIBELLES, montants_par_ligne
+from .brouillon import LIBELLES, PIECES_EXECUTION, montants_par_ligne
+from .brouillon import piece as B_piece
 from .db import ecrire_parametre, lire_parametre, transaction, verifier_journal, journaliser
 from . import canaux
 from . import db as _db
@@ -125,7 +126,7 @@ def version_css() -> str:
     return str(int((RACINE / "app" / "static" / "app.css").stat().st_mtime))
 
 
-modeles.env.globals.update(version_css=version_css, aide=aide, ROLES=ROLES, STATUTS=STATUTS, CANAUX=CANAUX, PAIEMENTS=LIBELLES_PAIEMENT,
+modeles.env.globals.update(version_css=version_css, aide=aide, ROLES=ROLES, PIECES_EXECUTION=PIECES_EXECUTION, STATUTS=STATUTS, CANAUX=CANAUX, PAIEMENTS=LIBELLES_PAIEMENT,
                            LIBELLES=LIBELLES, EXTRACTEURS=EXTRACTEURS)
 
 
@@ -269,7 +270,7 @@ async def connexion_post(request: Request, login: str = Form(...), mot_de_passe:
 def inscription(request: Request):
     c = conn()
     try:
-        return page(request, "inscription.html", c, None, tailles=S.TAILLES, regimes=S.REGIMES)
+        return page(request, "inscription.html", c, None, tailles=S.TAILLES, regimes=S.REGIMES, activites=S.ACTIVITES)
     finally:
         c.close()
 
@@ -410,7 +411,7 @@ EXEMPLES = json.loads((RACINE / "data" / "exemples.json").read_text(encoding="ut
 @app.get("/dossiers/nouveau", response_class=HTMLResponse)
 async def nouveau(request: Request):
     async def vue(request, c, u):
-        return page(request, "nouveau.html", c, u, exemples=EXEMPLES)
+        return page(request, "nouveau.html", c, u, exemples=EXEMPLES, piece_defaut=S.piece_par_defaut(c))
     return await avec_utilisateur(vue)(request)
 
 
@@ -430,7 +431,8 @@ async def nouveau_post(request: Request):
         # pour les tests et la mesure.
         extracteur = "regles" if form.get("extracteur") == "regles" else S.extracteur_auto(bool(octets))
         return S.creer_dossier(c, u, form.get("canal", "WHATSAPP"), form.get("texte_commande", ""),
-                               form.get("texte_livraison", ""), extracteur, octets, mime, nom)
+                               form.get("texte_livraison", ""), extracteur, octets, mime, nom,
+                               form.get("piece_execution"))
     return await action(request, lambda did: f"/dossiers/{did}", "/dossiers/nouveau", f,
                         "Brouillon créé. Vérifiez chaque champ avant de le proposer à la validation.")
 
@@ -604,7 +606,7 @@ async def revue(request: Request, did: int):
             if l.get("citation_prix"):
                 cit_cmd.append((l["citation_prix"], "Prix cité"))
             if l.get("citation_livree"):
-                cit_bl.append((l["citation_livree"], "Quantité livrée"))
+                cit_bl.append((l["citation_livree"], B_piece(br)["citation"]))
         for cle, lib in (("mode_paiement", "Paiement"), ("total_cite", "Total cité")):
             if br[cle].get("citation"):
                 cit_cmd.append((br[cle]["citation"], lib))
@@ -640,9 +642,9 @@ async def livraison(request: Request, did: int):
     async def f(c, u, form):
         S.verifier_acces_dossier(c, u, did)
         if not form.get("texte_livraison", "").strip():
-            raise S.Refus("Collez le texte du bon de livraison.")
+            raise S.Refus("Collez le texte de la pièce (bon de livraison ou attestation).")
         S.ajouter_livraison(c, u, did, int(form["version"]), form["texte_livraison"], form.get("extracteur", "regles"))
-    return await action(request, f"/dossiers/{did}", f"/dossiers/{did}", f, "Bon de livraison rattaché.")
+    return await action(request, f"/dossiers/{did}", f"/dossiers/{did}", f, "Pièce d'exécution rattachée.")
 
 
 @app.post("/dossiers/{did}/decider")
@@ -831,7 +833,7 @@ ACTIONS_JOURNAL = {
     "CONNEXION": ("s'est connecté(e)", "connexions", "sortie"),
     "CONNEXION_REFUSEE": ("a tenté de se connecter : refusé", "connexions", "alerte"),
     "DOSSIER_CREE": ("a créé un dossier de vente", "ventes", "brouillon"),
-    "LIVRAISON_AJOUTEE": ("a rattaché un bon de livraison", "ventes", "brouillon"),
+    "LIVRAISON_AJOUTEE": ("a rattaché un bon de livraison ou une attestation de service fait", "ventes", "brouillon"),
     "BROUILLON_CORRIGE": ("a corrigé un brouillon", "ventes", "brouillon"),
     "ANOMALIE_TRANCHEE": ("a tranché un contrôle", "ventes", "coche"),
     "DOSSIER_SUPPRIME": ("a supprimé un brouillon", "ventes", "alerte"),
@@ -1021,7 +1023,8 @@ async def parametres(request: Request):
         numeros = {h["id"]: h["numero"] for h in canaux.habilites(c)}
         return page(request, "parametres.html", c, u, mode_solo=lire_parametre(c, "mode_solo", False),
                     gemini=bool(os.environ.get("GEMINI_API_KEY")), groq=bool(os.environ.get("GROQ_API_KEY")),
-                    comptes=S.utilisateurs(c), numeros=numeros, canaux_cfg=cfg, roles_comptes=S.ROLES_COMPTES)
+                    comptes=S.utilisateurs(c), numeros=numeros, canaux_cfg=cfg, roles_comptes=S.ROLES_COMPTES,
+                    activites=S.ACTIVITES)
     return await avec_utilisateur(vue)(request)
 
 
@@ -1100,7 +1103,11 @@ async def parametres_post(request: Request):
             perso["logo"] = f"data:{logo.content_type};base64," + base64.b64encode(octets).decode()
         if form.get("retirer_logo"):
             perso["logo"] = None
+        ent = lire_parametre(c, "entreprise", {}) or {}
+        if form.get("activite") in S.ACTIVITES:
+            ent["activite"] = form.get("activite")
         with transaction(c):
+            ecrire_parametre(c, "entreprise", ent)
             ecrire_parametre(c, "personnalisation", perso)
             ecrire_parametre(c, "mode_solo", bool(form.get("mode_solo")))
             journaliser(c, u["id"], "PARAMETRES_MODIFIES", "entreprise",

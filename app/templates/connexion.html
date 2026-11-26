@@ -60,12 +60,13 @@
       </form>
 
       <div class="separateur"><span>Comptes de démonstration</span></div>
-      <div class="comptes-boutons">
+      <form class="comptes-boutons" method="post" action="/connexion">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <input type="hidden" name="demo" value="1">
         {% for c in comptes %}
-        <button type="button" class="compte" onclick="choisirCompte('{{ c.login }}')"><strong>{{ c.nom }}</strong><span>{{ ROLES[c.role] }}</span></button>
+        <button type="submit" class="compte" name="login" value="{{ c.login }}"><strong>{{ c.nom }}</strong><span>{{ ROLES[c.role] }}</span></button>
         {% endfor %}
-      </div>
-      <p class="note-demo">Un clic remplit l'identifiant. Le mot de passe de démonstration figure dans le README.</p>
+      </form>
       <p class="mention-connexion">Prototype BWAI'2026 · données fictives · émission DGI simulée · aucune valeur fiscale</p>
     </div>
   </section>
@@ -79,10 +80,6 @@ function basculerMdp(b) {
   champ.type = visible ? 'text' : 'password';
   b.setAttribute('aria-pressed', String(visible));
   b.setAttribute('aria-label', visible ? 'Masquer le mot de passe' : 'Afficher le mot de passe');
-}
-function choisirCompte(login) {
-  document.getElementById('login').value = login;
-  document.getElementById('mdp').focus();
 }
 </script>
 {% endblock %}

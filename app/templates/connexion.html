@@ -1,35 +1,88 @@
 {% extends "base.html" %}
 {% block titre %}Connexion{% endblock %}
-{% block contenu %}
-<div class="connexion">
-  <div class="text-center mb-4">
-    <span class="logo-marque mx-auto mb-3" style="width:52px;height:52px;font-size:1.5rem;border-radius:14px">e</span>
-    <h1 class="h2 mb-0">{{ entreprise.raison_sociale }}</h1>
-    <p class="text-secondary"><strong>e-FACIL</strong> · de la commande reçue à la facture vérifiable</p>
-  </div>
-  <div class="card">
-    <div class="card-body">
+{% block public %}
+<div class="page-connexion">
+  <!-- Illustration : un message WhatsApp devient une facture vérifiée -->
+  <section class="connexion-visuel" aria-hidden="true">
+    <svg class="anneaux" viewBox="0 0 600 600">
+      <circle cx="300" cy="300" r="290" /><circle cx="300" cy="300" r="225" /><circle cx="300" cy="300" r="160" />
+      <g class="repere" transform="translate(205 22)"><circle r="16"/><circle r="6" class="creux"/></g>
+      <g class="repere" transform="translate(470 85)"><circle r="16"/><circle r="6" class="creux"/></g>
+      <g class="repere" transform="translate(16 250)"><circle r="16"/><circle r="6" class="creux"/></g>
+      <g class="repere" transform="translate(102 360)"><circle r="16"/><circle r="6" class="creux"/></g>
+      <g class="repere" transform="translate(522 318)"><circle r="16"/><circle r="6" class="creux"/></g>
+      <g class="repere" transform="translate(560 430)"><circle r="16"/><circle r="6" class="creux"/></g>
+    </svg>
+    <div class="telephone">
+      <div class="encoche"></div>
+      <div class="ecran">
+        <div class="ecran-entete"><img src="/static/img/icone.svg" alt="" width="22" height="22"><span>e-<b>FACIL</b></span></div>
+        <div class="bulle">Bjr, c Dossou. Envoie moi <mark>12</mark> cartons de savon et <mark>5</mark> sacs de riz. Je paie <mark>momo</mark></div>
+        <div class="fleche">↓</div>
+        <div class="mini-facture">
+          <div class="mf-haut"><span>FV-2026-000001</span><span class="mf-ok">✓ Confirmée</span></div>
+          <div class="mf-ligne"><span>Savon de ménage × 10</span><span>120 000 F</span></div>
+          <div class="mf-ligne"><span>Riz parfumé × 5</span><span>87 500 F</span></div>
+          <div class="mf-ligne mf-aib"><span>AIB 1 %</span><span>− 1 758 F</span></div>
+          <div class="mf-total"><span>Net à payer</span><span>205 742 F</span></div>
+          <div class="mf-qr"><span></span><small>Code DGI simulé</small></div>
+        </div>
+        <ul class="controles-ok">
+          <li>Client reconnu</li><li>Quantités citées dans le message</li><li>Calcul conforme aux règles DGI</li><li>Validée par le responsable</li>
+        </ul>
+      </div>
+    </div>
+    <p class="visuel-legende">L'IA lit le message, le code calcule et contrôle, vous décidez.</p>
+  </section>
+
+  <!-- Formulaire -->
+  <section class="connexion-formulaire">
+    <div class="formulaire-interieur">
+      <div class="marque-connexion"><img src="/static/img/icone.svg" alt="" width="44" height="44"><span>e-<b>FACIL</b></span></div>
+      <h1>Bon retour</h1>
+      <p class="sous-titre">Connectez-vous à l'espace de {{ entreprise.raison_sociale or 'votre entreprise' }}</p>
+
+      {% if flash %}<div class="alert alert-success" role="status">{{ flash }}</div>{% endif %}
+      {% if erreur %}<div class="alert alert-danger" role="alert">{{ erreur }}</div>{% endif %}
+
       <form method="post" action="/connexion" autocomplete="off">
         <input type="hidden" name="csrf" value="{{ csrf }}">
-        <div class="mb-3">
-          <label class="form-label" for="login">Identifiant</label>
-          <input class="form-control" id="login" name="login" required autofocus placeholder="aicha">
+        <label class="lib-champ" for="login">Identifiant</label>
+        <input class="champ" id="login" name="login" required autofocus placeholder="ex. aicha">
+        <label class="lib-champ" for="mdp">Mot de passe</label>
+        <div class="champ-mdp">
+          <input class="champ" id="mdp" name="mot_de_passe" type="password" required placeholder="Votre mot de passe">
+          <button type="button" class="oeil" aria-label="Afficher le mot de passe" aria-pressed="false" onclick="basculerMdp(this)">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
+          </button>
         </div>
-        <div class="mb-3">
-          <label class="form-label" for="mdp">Mot de passe</label>
-          <input class="form-control" id="mdp" name="mot_de_passe" type="password" required>
-        </div>
-        <button class="btn btn-primary w-100" type="submit">Se connecter</button>
+        <button class="bouton-connexion" type="submit">Se connecter</button>
       </form>
+
+      <div class="separateur"><span>Comptes de démonstration</span></div>
+      <div class="comptes-boutons">
+        {% for c in comptes %}
+        <button type="button" class="compte" onclick="choisirCompte('{{ c.login }}')"><strong>{{ c.nom }}</strong><span>{{ ROLES[c.role] }}</span></button>
+        {% endfor %}
+      </div>
+      <p class="note-demo">Un clic remplit l'identifiant. Le mot de passe de démonstration figure dans le README.</p>
+      <p class="mention-connexion">Prototype BWAI'2026 · données fictives · émission DGI simulée · aucune valeur fiscale</p>
     </div>
-  </div>
-  <div class="card mt-3">
-    <div class="card-body">
-      <p class="text-secondary small mb-2">Comptes de démonstration (mot de passe dans le README) :</p>
-      <table class="comptes-demo small w-100">
-        {% for c in comptes %}<tr><td class="mono">{{ c.login }}</td><td>{{ c.nom }}</td><td class="text-secondary">{{ ROLES[c.role] }}</td></tr>{% endfor %}
-      </table>
-    </div>
-  </div>
+  </section>
 </div>
+{% endblock %}
+{% block scripts %}
+<script>
+function basculerMdp(b) {
+  const champ = document.getElementById('mdp');
+  const visible = champ.type === 'password';
+  champ.type = visible ? 'text' : 'password';
+  b.setAttribute('aria-pressed', String(visible));
+  b.setAttribute('aria-label', visible ? 'Masquer le mot de passe' : 'Afficher le mot de passe');
+}
+function choisirCompte(login) {
+  document.getElementById('login').value = login;
+  document.getElementById('mdp').focus();
+}
+</script>
 {% endblock %}

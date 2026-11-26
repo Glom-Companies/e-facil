@@ -5,6 +5,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block titre %}Facturation{% endblock %} · {{ entreprise.raison_sociale or "Facturation PME" }}</title>
+  <link rel="icon" type="image/svg+xml" href="/static/img/icone.svg">
+  <link rel="apple-touch-icon" href="/static/img/icone-512.png">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/core@1.0.0-beta20/dist/css/tabler.min.css">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource-variable/inter@5/index.css">
   <link rel="stylesheet" href="/static/app.css?v={{ version_css() }}">
@@ -15,8 +17,8 @@
 <div class="coque">
   <aside class="lateral" id="menu" aria-label="Menu principal">
     <a href="/" class="logo">
-      <span class="logo-marque" aria-hidden="true">e</span>
-      <span>e-FACIL<small>{{ entreprise.raison_sociale }}</small></span>
+      <img src="/static/img/icone.svg" alt="" width="36" height="36">
+      <span>e-<span class="facil">FACIL</span><small>{{ entreprise.raison_sociale }}</small></span>
     </a>
     <nav class="nav-lat">
       <a class="nav-lien {% if p == '/' %}actif{% endif %}" href="/">{{ icone('tableau') }}<span>Tableau de bord</span></a>
@@ -79,6 +81,7 @@
   </div>
 </div>
 {% else %}
+{% block public %}
 <div class="bandeau-simulation">Prototype de démonstration · données fictives · émission DGI simulée</div>
 <main class="contenu contenu-seul">
   {% if flash %}<div class="alert alert-success" role="status">{{ flash }}</div>{% endif %}
@@ -86,6 +89,7 @@
   {% block contenu_public %}{{ self.contenu() }}{% endblock %}
 </main>
 <footer class="pied"><strong>e-FACIL</strong> par l'équipe BillGenius · prototype BWAI'2026, cas 2 · Les factures produites n'ont aucune valeur fiscale.</footer>
+{% endblock %}
 {% endif %}
 {% block scripts %}{% endblock %}
 </body>

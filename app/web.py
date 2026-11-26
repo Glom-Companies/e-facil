@@ -533,13 +533,80 @@ async def ecritures(request: Request):
     return await avec_utilisateur(vue)(request)
 
 
+# Action du journal -> (phrase, catégorie, icône). La phrase suit le nom de la personne.
+ACTIONS_JOURNAL = {
+    "CONNEXION": ("s'est connecté(e)", "connexions", "sortie"),
+    "CONNEXION_REFUSEE": ("a tenté de se connecter : refusé", "connexions", "alerte"),
+    "DOSSIER_CREE": ("a créé un dossier de vente", "ventes", "brouillon"),
+    "LIVRAISON_AJOUTEE": ("a rattaché un bon de livraison", "ventes", "brouillon"),
+    "BROUILLON_CORRIGE": ("a corrigé un brouillon", "ventes", "brouillon"),
+    "ANOMALIE_TRANCHEE": ("a tranché un contrôle", "ventes", "coche"),
+    "DOSSIER_SUPPRIME": ("a supprimé un brouillon", "ventes", "alerte"),
+    "PROFORMA_CREEE": ("a produit une pro forma", "ventes", "pdf"),
+    "FACTURE_VALIDEE": ("a validé et numéroté une facture", "ventes", "cadenas"),
+    "EMISSION_DEMANDEE": ("a émis vers la DGI simulée", "ventes", "envoyer"),
+    "FACTURE_CONFIRMEE": ("a reçu la confirmation de la DGI simulée", "ventes", "facture-ok"),
+    "EMISSION_ANNULEE": ("a vu l'émission annulée par la DGI simulée", "ventes", "alerte"),
+    "AVOIR_CREE": ("a créé un avoir", "ventes", "facture"),
+    "COPIE_IMPRIMEE": ("a imprimé une copie", "ventes", "pdf"),
+    "ACCUSE_CLIENT": ("a enregistré l'accusé de réception du client", "ventes", "coche"),
+    "PAIEMENT_ENREGISTRE": ("a enregistré un paiement", "paiements", "argent"),
+    "CLIENT_MODIFIE": ("a modifié une fiche client", "administration", "gestion"),
+    "ARTICLE_MODIFIE": ("a modifié un article", "administration", "gestion"),
+    "PARAMETRES_MODIFIES": ("a modifié les paramètres", "administration", "gestion"),
+    "DEMO_REINITIALISEE": ("a réinitialisé la démonstration", "administration", "alerte"),
+}
+CATEGORIES_JOURNAL = {"": "Tout", "ventes": "Ventes", "paiements": "Paiements", "connexions": "Connexions",
+                      "administration": "Administration"}
+JOURS_SEMAINE = ["lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"]
+MOIS = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre",
+        "novembre", "décembre"]
+
+
+def _jour_long(iso: str) -> str:
+    j = date.fromisoformat(iso[:10])
+    if j == date.today():
+        return "Aujourd'hui"
+    return f"{JOURS_SEMAINE[j.weekday()].capitalize()} {j.day} {MOIS[j.month - 1]} {j.year}"
+
+
 @app.get("/journal", response_class=HTMLResponse)
-async def journal(request: Request, verifier: int = 0):
+async def journal(request: Request, verifier: int = 0, categorie: str = "", acteur: str = ""):
     async def vue(request, c, u):
-        lignes = [dict(r) for r in c.execute("SELECT * FROM journal ORDER BY id DESC LIMIT 300")]
         noms = {r["id"]: r["nom"] for r in c.execute("SELECT id, nom FROM utilisateurs")}
+        numeros = {str(r["id"]): r["numero"] for r in c.execute("SELECT id, numero FROM factures")}
+        lignes = []
+        for r in c.execute("SELECT * FROM journal ORDER BY id DESC LIMIT 400"):
+            l = dict(r)
+            phrase, cat, ico = ACTIONS_JOURNAL.get(l["action"], (l["action"].lower().replace("_", " "), "administration", "gestion"))
+            if (categorie and cat != categorie) or (acteur and l["acteur"] != acteur):
+                continue
+            try:
+                l["donnees"] = json.loads(l["details"]) if l["details"] else {}
+            except ValueError:
+                l["donnees"] = {}
+            l["details_lisibles"] = json.dumps(l["donnees"], ensure_ascii=False, indent=2)
+            genre, _, ident = l["objet"].partition(":")
+            l["lien"] = {"dossier": f"/dossiers/{ident}", "facture": f"/factures/{ident}"}.get(genre)
+            l["objet_lib"] = {"dossier": f"Dossier {ident}", "facture": numeros.get(ident, f"Facture {ident}"),
+                              "utilisateur": noms.get(ident, ident)}.get(genre, l["objet"])
+            if genre == "utilisateur" and ident == l["acteur"]:
+                l["objet_lib"] = None  # « Rodrigue s'est connecté » : inutile de répéter le nom
+            qui = {"anonyme": "Une personne inconnue", "reprise": "Le système (reprise)", "systeme": "Le système"}
+            l.update(phrase=phrase, categorie=cat, icone=ico, qui=noms.get(l["acteur"], qui.get(l["acteur"], l["acteur"])),
+                     jour=_jour_long(l["horodatage"]), heure=l["horodatage"][11:16])
+            lignes.append(l)
+        chaine = [dict(r) for r in c.execute("SELECT id, action, hash, hash_precedent FROM journal ORDER BY id DESC LIMIT 4")][::-1]
+        aujourdhui = date.today().isoformat()
+        stats = {
+            "total": c.execute("SELECT COUNT(*) FROM journal").fetchone()[0],
+            "jour": c.execute("SELECT COUNT(*) FROM journal WHERE substr(horodatage, 1, 10) = ?", (aujourdhui,)).fetchone()[0],
+            "refusees": c.execute("SELECT COUNT(*) FROM journal WHERE action = 'CONNEXION_REFUSEE'").fetchone()[0],
+            "corrections": c.execute("SELECT COUNT(*) FROM journal WHERE action IN ('BROUILLON_CORRIGE', 'ANOMALIE_TRANCHEE')").fetchone()[0],
+        }
         resultat = verifier_journal(c) if verifier else None
-        return page(request, "journal.html", c, u, lignes=lignes, noms=noms, resultat=resultat)
+        return page(request, "journal.html", c, u, lignes=lignes, noms=noms, resultat=resultat, chaine=chaine,
+                    stats=stats, categories=CATEGORIES_JOURNAL, categorie=categorie, acteur=acteur)
     return await avec_utilisateur(vue)(request)
 
 

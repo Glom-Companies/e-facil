@@ -107,3 +107,14 @@ def test_recherche_aide_et_demo(client):
     connecter(client, "admin")
     r = client.post("/parametres/demo", data={"csrf": csrf(client.get("/parametres").text)})
     assert "Démonstration chargée : 5 factures émises, 5 commandes à vérifier." in r.text
+
+
+def test_journal_filtres_et_integrite(client):
+    connecter(client, "admin")
+    client.post("/parametres/demo", data={"csrf": csrf(client.get("/parametres").text)})
+    connecter(client, "rodrigue")
+    r = client.get("/journal?categorie=paiements")
+    assert "a enregistré un paiement" in r.text and "s&#39;est connecté" not in r.text
+    r = client.get("/journal?verifier=1")
+    assert "Journal intègre" in r.text
+    assert client.get("/journal?categorie=inconnue&acteur=personne").status_code == 200

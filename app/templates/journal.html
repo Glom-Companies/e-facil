@@ -1,32 +1,99 @@
 {% extends "base.html" %}
-{% block titre %}Journal{% endblock %}
+{% from "_icones.html" import icone %}
+{% block titre %}Journal d'audit{% endblock %}
+{% set teinte = {'U-01': 'var(--serie-1)', 'U-02': 'var(--vert)', 'U-03': 'var(--serie-2)', 'U-04': '#6a4ce2'} %}
 {% block contenu %}
 <div class="entete-page">
-  <div><h1>Journal d'audit</h1><p class="sous">Qui a fait quoi et quand. Chaque ligne contient l'empreinte de la précédente : toute modification se voit.</p></div>
-  <a class="btn btn-outline-primary" href="/journal?verifier=1">Vérifier l'intégrité</a>
+  <div><h1>Journal d'audit</h1><p class="sous">Qui a fait quoi et quand. Le journal ne s'écrit qu'en ajout, et chaque ligne scelle la précédente.</p></div>
+  <a class="btn btn-primary d-inline-flex align-items-center gap-2" href="/journal?verifier=1{% if categorie %}&categorie={{ categorie }}{% endif %}{% if acteur %}&acteur={{ acteur }}{% endif %}">{{ icone('cadenas', 18) }} Vérifier l'intégrité</a>
 </div>
-{% if resultat %}
-  {% if resultat[0] %}<div class="alert alert-success">Journal intègre : {{ resultat[2] }} lignes vérifiées, aucune modification détectée.</div>
-  {% else %}<div class="alert alert-danger">Journal altéré à la ligne {{ resultat[1] }} : son contenu ne correspond plus à son empreinte.</div>{% endif %}
-{% endif %}
-<div class="card">
-  <div class="table-responsive">
-  <table class="table table-vcenter card-table table-responsive-empile">
-    <thead><tr><th>N°</th><th>Date</th><th>Qui</th><th>Action</th><th>Objet</th><th>Détails</th><th>Empreinte</th></tr></thead>
-    <tbody>
-    {% for l in lignes %}
-    <tr>
-      <td data-label="N°" class="num">{{ l.id }}</td>
-      <td data-label="Date" class="text-secondary">{{ l.horodatage|date_fr }}</td>
-      <td data-label="Qui">{{ noms.get(l.acteur, l.acteur) }}</td>
-      <td data-label="Action"><span class="mono">{{ l.action }}</span></td>
-      <td data-label="Objet" class="mono">{{ l.objet }}</td>
-      <td data-label="Détails" class="small text-secondary" style="max-width:24rem;overflow-wrap:anywhere">{{ l.details[:220] }}</td>
-      <td data-label="Empreinte" class="mono small text-secondary">{{ l.hash[:10] }}…</td>
-    </tr>
-    {% endfor %}
-    </tbody>
-  </table>
+
+<!-- Chaîne d'empreintes -->
+<section class="integrite {% if resultat and resultat[0] %}ok{% elif resultat %}ko{% endif %} mb-4">
+  <div class="integrite-etat">
+    {% if resultat and resultat[0] %}
+      <span class="integrite-ico">{{ icone('coche', 28) }}</span>
+      <div><strong>Journal intègre</strong><span>{{ resultat[2] }} lignes vérifiées : aucune n'a été modifiée ni supprimée.</span></div>
+    {% elif resultat %}
+      <span class="integrite-ico">{{ icone('alerte', 28) }}</span>
+      <div><strong>Journal altéré à la ligne {{ resultat[1] }}</strong><span>Son contenu ne correspond plus à son empreinte : quelqu'un a modifié la base à la main.</span></div>
+    {% else %}
+      <span class="integrite-ico">{{ icone('cadenas', 28) }}</span>
+      <div><strong>Chaîne d'empreintes</strong><span>Cliquez sur « Vérifier l'intégrité » pour recalculer toutes les empreintes.</span></div>
+    {% endif %}
   </div>
+  {% if chaine %}
+  <ol class="chaine" aria-label="Derniers maillons de la chaîne">
+    {% for m in chaine %}
+    <li class="maillon">
+      <span class="m-num">n° {{ m.id }}</span>
+      <span class="m-action">{{ m.action|replace('_', ' ')|lower|capitalize }}</span>
+      <span class="m-hash" title="Empreinte précédente">préc. <code>{{ m.hash_precedent[:8] }}</code></span>
+      <span class="m-hash fort" title="Empreinte de cette ligne">emp. <code>{{ m.hash[:8] }}</code></span>
+    </li>
+    {% if not loop.last %}<li class="lien-chaine" aria-hidden="true"></li>{% endif %}
+    {% endfor %}
+  </ol>
+  <p class="chaine-note">L'empreinte (SHA-256) de chaque ligne entre dans le calcul de la suivante : modifier une ligne casse toute la suite.</p>
+  {% endif %}
+</section>
+
+<!-- Chiffres-clés -->
+<div class="cartes-stat mb-4">
+  <div class="carte-stat"><span class="rond">{{ icone('gestion', 24) }}</span><span><span class="lib">Événements enregistrés</span><span class="val">{{ stats.total }}</span></span></div>
+  <div class="carte-stat"><span class="rond">{{ icone('horloge', 24) }}</span><span><span class="lib">Aujourd'hui</span><span class="val">{{ stats.jour }}</span></span></div>
+  <div class="carte-stat"><span class="rond">{{ icone('brouillon', 24) }}</span><span><span class="lib">Corrections et décisions</span><span class="val">{{ stats.corrections }}</span></span></div>
+  <div class="carte-stat"><span class="rond {% if stats.refusees %}rond-alerte{% endif %}">{{ icone('alerte', 24) }}</span><span><span class="lib">Connexions refusées</span><span class="val">{{ stats.refusees }}</span></span></div>
+</div>
+
+<!-- Filtres -->
+<form class="filtres-journal mb-3" method="get" action="/journal">
+  <nav class="onglets mb-0" aria-label="Filtrer par catégorie">
+    {% for k, lib in categories.items() %}
+    <a class="{% if k == categorie %}actif{% endif %}" href="/journal?{% if k %}categorie={{ k }}&{% endif %}{% if acteur %}acteur={{ acteur }}{% endif %}">{{ lib }}</a>
+    {% endfor %}
+  </nav>
+  <input type="hidden" name="categorie" value="{{ categorie }}">
+  <select class="form-select form-select-sm" name="acteur" aria-label="Filtrer par personne" onchange="this.form.submit()">
+    <option value="">Toutes les personnes</option>
+    {% for id, nom in noms.items() %}<option value="{{ id }}" {% if id == acteur %}selected{% endif %}>{{ nom }}</option>{% endfor %}
+  </select>
+</form>
+
+<!-- Frise -->
+<div class="card">
+  {% if lignes %}
+  {% set ns = namespace(jour='') %}
+  <ol class="frise-journal">
+    {% for l in lignes %}
+    {% if l.jour != ns.jour %}{% set ns.jour = l.jour %}<li class="fj-jour">{{ l.jour }}</li>{% endif %}
+    <li class="fj-evt fj-{{ l.categorie }} {% if l.action in ('CONNEXION_REFUSEE', 'EMISSION_ANNULEE', 'DOSSIER_SUPPRIME', 'DEMO_REINITIALISEE') %}fj-attention{% endif %}">
+      <span class="fj-heure">{{ l.heure }}</span>
+      <span class="fj-ico">{{ icone(l.icone, 18) }}</span>
+      <div class="fj-corps">
+        <p class="fj-phrase">
+          <span class="fj-avatar" style="background:{{ teinte.get(l.acteur, 'var(--gris)') }}">{{ l.qui[:1]|upper }}</span>
+          <strong>{{ l.qui }}</strong> {{ l.phrase }}
+          {% if l.lien %}<a href="{{ l.lien }}" class="fj-objet">{{ l.objet_lib }}</a>{% elif l.objet_lib %}<span class="fj-objet neutre">{{ l.objet_lib }}</span>{% endif %}
+        </p>
+        <div class="fj-meta">
+          {% if l.donnees.montant %}<span class="fj-puce">{{ l.donnees.montant|fcfa }}</span>{% endif %}
+          {% if l.donnees.mode %}<span class="fj-puce">{{ PAIEMENTS.get(l.donnees.mode, l.donnees.mode) }}</span>{% endif %}
+          {% if l.donnees.numero %}<span class="fj-puce mono">{{ l.donnees.numero }}</span>{% endif %}
+          {% if l.donnees.extracteur %}<span class="fj-puce">lu par {{ EXTRACTEURS.get(l.donnees.extracteur, l.donnees.extracteur) }}</span>{% endif %}
+          {% if l.donnees.repli %}<span class="fj-puce attention">repli automatique</span>{% endif %}
+          {% if l.donnees.simule %}<span class="fj-puce">simulé</span>{% endif %}
+          <span class="fj-hash" title="Empreinte de la ligne n° {{ l.id }}">n° {{ l.id }} · <code>{{ l.hash[:10] }}</code></span>
+          {% if l.donnees %}
+          <details class="fj-details"><summary>Détails</summary><pre>{{ l.details_lisibles }}</pre></details>
+          {% endif %}
+        </div>
+      </div>
+    </li>
+    {% endfor %}
+  </ol>
+  {% else %}
+  <p class="vide">Aucun événement pour ce filtre.</p>
+  {% endif %}
 </div>
 {% endblock %}

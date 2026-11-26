@@ -689,3 +689,35 @@ details.card[open]>summary.card-header{border-radius:var(--rayon) var(--rayon) 0
 .dt-vide td{text-align:center;color:var(--gris);padding:1.5rem!important}
 .graph-donnees .dt-outils,.graph-donnees .dt-pied{padding-left:0;padding-right:0}
 @media (max-width:767px){.dt-recherche{max-width:none}}
+
+/* --- Téléphone WhatsApp flottant ------------------------------------------------------------ */
+.tel-lanceur{position:fixed;right:24px;bottom:24px;z-index:60;display:flex;align-items:center;gap:.5rem;border:0;border-radius:999px;
+  background:#25a266;color:#fff;font-weight:700;padding:.75rem 1.1rem;box-shadow:0 10px 24px rgba(25,28,31,.25);transition:transform .15s,background .15s}
+.tel-lanceur:hover{transform:translateY(-2px);background:#1e8a57}
+.tel-lanceur:focus-visible{outline:3px solid var(--encre);outline-offset:3px}
+.tel-lanceur.ouvert{background:var(--encre)}
+.tel-flottant{position:fixed;z-index:70;display:flex;flex-direction:column;min-width:240px;min-height:420px;max-width:calc(100vw - 16px);max-height:calc(100vh - 16px);
+  background:#f3f5f6;border:1px solid var(--trait);border-radius:18px;box-shadow:0 24px 60px rgba(25,28,31,.28);overflow:hidden;resize:both}
+.tel-flottant[hidden]{display:none}
+.tel-flottant.glisse{opacity:.92;user-select:none}
+.tel-flottant.glisse iframe{pointer-events:none}
+.tel-poignee{display:flex;align-items:center;gap:.5rem;padding:.45rem .6rem .45rem .8rem;background:#fff;border-bottom:1px solid var(--trait);cursor:grab;font-size:.82rem;font-weight:600;touch-action:none}
+.tel-poignee:active{cursor:grabbing}
+.tel-poignee:focus-visible{outline:2px solid var(--vert);outline-offset:-2px}
+.tel-poignee>span:nth-child(2){flex:1}
+.tel-grip{width:14px;height:14px;background:radial-gradient(circle,#b5bcc3 1.3px,transparent 1.5px) 0 0/5px 5px}
+.tel-agrandir,.tel-fermer{display:grid;place-items:center;width:28px;height:28px;border-radius:8px;border:0;background:none;color:var(--gris);font-size:1.1rem;text-decoration:none;line-height:1}
+.tel-agrandir:hover,.tel-fermer:hover{background:var(--panneau);color:var(--encre)}
+.tel-flottant iframe{flex:1;width:100%;border:0;background:#f3f5f6}
+@media (max-width:767px){.tel-lanceur span{display:none}.tel-lanceur{padding:.8rem}}
+
+/* Simulateur dans la fenêtre flottante : seul le téléphone, ajusté à la hauteur disponible. */
+.mode-flottant{background:#f3f5f6;margin:0;height:100vh;overflow:hidden}
+.mode-flottant .grille-simu{display:block;height:100vh;padding:8px 10px 0}
+.mode-flottant .colonne-telephone{width:auto;min-width:0;height:100%;align-items:center}
+.mode-flottant .colonne-telephone .form-label{display:none}
+.mode-flottant #numero{margin-bottom:6px!important;font-size:.78rem;padding:.25rem 1.8rem .25rem .5rem;width:100%}
+.mode-flottant .telephone-simu{height:calc(100vh - 62px);width:auto;max-width:100%;aspect-ratio:414/868;border-radius:clamp(28px,7vh,56px);padding:clamp(6px,1.4vh,12px)}
+.mode-flottant .ecran-simu{border-radius:clamp(22px,5.5vh,44px);padding-top:clamp(34px,6.8vh,58px)}
+.mode-flottant .telephone-simu .encoche{top:clamp(12px,2.8vh,24px);width:32%;height:clamp(18px,3.7vh,32px)}
+.mode-flottant .etat-micro{min-height:0;margin:2px 0 0;font-size:.72rem}

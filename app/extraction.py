@@ -336,7 +336,8 @@ def extraire_gemini(texte: str, octets: bytes | None = None, mime: str | None = 
         except (httpx.TransportError, OSError) as e:
             raise _Transitoire(f"réseau indisponible ({type(e).__name__})", 2) from e
 
-    return _avec_modeles("gemini", "GEMINI_", "gemini-2.5-flash", "gemini-3.1-flash-lite", texte, octets, appeler)
+    return _avec_modeles("gemini", "GEMINI_", "gemini-3.8-flash", "gemini-3.5-flash-lite,gemini-3.1-flash-lite",
+                         texte, octets, appeler)
 
 
 # --- Extracteur Groq (API compatible OpenAI, palier gratuit) ---------------------------

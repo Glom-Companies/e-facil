@@ -1,0 +1,107 @@
+{
+  "corpus": "dev.jsonl",
+  "sha256": "2b648540a351c429a855724eb44d7db6b6b5d559cd8d58839b93b71990961fda",
+  "messages": 20,
+  "date": "2026-11-26T01:50:49",
+  "resultats": {
+    "S0": {
+      "compteurs": {
+        "client": {
+          "justes": 20,
+          "total": 20,
+          "inventes": 0,
+          "vides_a_tort": 0,
+          "attendus_vides": 3
+        },
+        "mode_paiement": {
+          "justes": 20,
+          "total": 20,
+          "inventes": 0,
+          "vides_a_tort": 0,
+          "attendus_vides": 1
+        },
+        "total_cite": {
+          "justes": 19,
+          "total": 20,
+          "inventes": 0,
+          "vides_a_tort": 1,
+          "attendus_vides": 17
+        },
+        "ligne_article": {
+          "justes": 44,
+          "total": 45,
+          "inventes": 1,
+          "vides_a_tort": 0,
+          "attendus_vides": 0
+        },
+        "quantite_commandee": {
+          "justes": 38,
+          "total": 44,
+          "inventes": 0,
+          "vides_a_tort": 5,
+          "attendus_vides": 2
+        },
+        "quantite_livree": {
+          "justes": 12,
+          "total": 12,
+          "inventes": 0,
+          "vides_a_tort": 0,
+          "attendus_vides": 0
+        },
+        "prix_cite": {
+          "justes": 37,
+          "total": 44,
+          "inventes": 1,
+          "vides_a_tort": 6,
+          "attendus_vides": 33
+        },
+        "sans_anomalie_bloquante": {
+          "justes": 3,
+          "total": 5
+        },
+        "anomalie:ECART_COMMANDE_LIVRAISON": {
+          "detectees": 2,
+          "total": 3
+        },
+        "anomalie:PRIX_INHABITUEL": {
+          "detectees": 2,
+          "total": 2
+        },
+        "anomalie:CLIENT_INCONNU": {
+          "detectees": 2,
+          "total": 2
+        },
+        "anomalie:QUANTITE_MANQUANTE": {
+          "detectees": 2,
+          "total": 2
+        },
+        "anomalie:CLIENT_AMBIGU": {
+          "detectees": 1,
+          "total": 1
+        },
+        "anomalie:ARTICLE_INCONNU": {
+          "detectees": 0,
+          "total": 2
+        },
+        "anomalie:TOTAL_INCOHERENT": {
+          "detectees": 1,
+          "total": 2
+        },
+        "anomalie:QUANTITE_INVALIDE": {
+          "detectees": 1,
+          "total": 1
+        },
+        "anomalie:REMISE_A_VALIDER": {
+          "detectees": 1,
+          "total": 1
+        },
+        "anomalie:INSTRUCTION_SUSPECTE": {
+          "detectees": 1,
+          "total": 1
+        }
+      },
+      "erreurs": 0,
+      "secondes_par_message": 0.03
+    }
+  }
+}

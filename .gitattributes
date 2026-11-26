@@ -1,0 +1,3 @@
+# Le corpus de test est gelé par son empreinte SHA-256 : fins de ligne LF sur toutes les machines.
+*.jsonl text eol=lf
+*.json text eol=lf

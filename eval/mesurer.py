@@ -134,7 +134,7 @@ def main() -> None:
     empreinte = hashlib.sha256(args.corpus.read_bytes()).hexdigest()
     rapport = {"corpus": str(args.corpus.name), "sha256": empreinte, "messages": len(corpus),
                "date": datetime.now().isoformat(timespec="seconds"),
-               "modele_gemini": os.environ.get("GEMINI_MODELE") or "gemini-2.5-flash",
+               "modele_gemini": os.environ.get("GEMINI_MODELE") or "gemini-3.8-flash",
                "modele_groq": os.environ.get("GROQ_MODELE") or "openai/gpt-oss-120b", "resultats": {}}
 
     for nom in args.configs:

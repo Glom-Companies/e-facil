@@ -1,10 +1,167 @@
 [
-  {"id": "C-001", "nom": "Ets Dossou et Frères", "alias": ["Dossou", "Ets Dossou", "tonton Dossou"], "type": "ENTREPRISE_REEL", "ifu": "9900000000017", "adresse": "Marché Dantokpa, Cotonou", "telephone": "+229 01 00 00 01 17", "aib_taux": 1, "delai_paiement_jours": 30},
-  {"id": "C-002", "nom": "Supermarché Houngbédji SARL", "alias": ["Houngbédji", "Supermarché Houngbédji", "super Houngbedji"], "type": "ENTREPRISE_REEL", "ifu": "9900000000025", "adresse": "Cadjèhoun, Cotonou", "telephone": "+229 01 00 00 02 25", "aib_taux": 1, "delai_paiement_jours": 30},
-  {"id": "C-003", "nom": "Boutique Mama Adjovi (Godomey)", "alias": ["Mama Adjovi", "Adjovi Godomey"], "type": "ENTREPRISE_TPS", "ifu": "9900000000033", "adresse": "Carrefour Godomey, Abomey-Calavi", "telephone": "+229 01 00 00 03 33", "aib_taux": 0, "delai_paiement_jours": 0},
-  {"id": "C-004", "nom": "Boutique Mama Adjovi (Fidjrossè)", "alias": ["Mama Adjovi", "Adjovi Fidjrossè", "Adjovi Fidjrosse"], "type": "ENTREPRISE_TPS", "ifu": "9900000000041", "adresse": "Fidjrossè plage, Cotonou", "telephone": "+229 01 00 00 04 41", "aib_taux": 0, "delai_paiement_jours": 0},
-  {"id": "C-005", "nom": "Hôtel Agossou Palace SA", "alias": ["Agossou Palace", "hôtel Agossou", "hotel Agossou"], "type": "ENTREPRISE_REEL", "ifu": "9900000000059", "adresse": "Haie Vive, Cotonou", "telephone": "+229 01 00 00 05 59", "aib_taux": 5, "delai_paiement_jours": 45},
-  {"id": "C-006", "nom": "Cantine scolaire publique de Bohicon", "alias": ["cantine de Bohicon", "cantine Bohicon"], "type": "STRUCTURE_ETAT", "ifu": "9900000000067", "adresse": "Bohicon", "telephone": "+229 01 00 00 06 67", "aib_taux": 0, "delai_paiement_jours": 60},
-  {"id": "C-007", "nom": "Gbaguidi Import-Export", "alias": ["Gbaguidi", "Gbaguidi import"], "type": "ENTREPRISE_REEL", "ifu": "9900000000075", "adresse": "Zone portuaire, Cotonou", "telephone": "+229 01 00 00 07 75", "aib_taux": 1, "delai_paiement_jours": 30},
-  {"id": "C-008", "nom": "Mme Chabi Rachida", "alias": ["Chabi", "Rachida", "Mme Chabi"], "type": "PARTICULIER", "ifu": null, "adresse": "Parakou", "telephone": "+229 01 00 00 08 83", "aib_taux": 0, "delai_paiement_jours": 0}
+  {
+    "id": "C-001",
+    "nom": "Ets Dossou et Frères",
+    "alias": ["Dossou", "Ets Dossou", "tonton Dossou", "c Dossou"],
+    "type": "ENTREPRISE_REEL",
+    "ifu": "9900000000017",
+    "adresse": "Marché Dantokpa, Cotonou",
+    "telephone": "+229 01 00 00 01 17",
+    "aib_taux": 1,
+    "delai_paiement_jours": 30
+  },
+  {
+    "id": "C-002",
+    "nom": "Supermarché Houngbédji SARL",
+    "alias": ["Houngbédji", "Supermarché Houngbédji", "super Houngbedji", "Houngbedji"],
+    "type": "ENTREPRISE_REEL",
+    "ifu": "9900000000025",
+    "adresse": "Cadjèhoun, Cotonou",
+    "telephone": "+229 01 00 00 02 25",
+    "aib_taux": 1,
+    "delai_paiement_jours": 30
+  },
+  {
+    "id": "C-003",
+    "nom": "Boutique Mama Adjovi (Godomey)",
+    "alias": ["Mama Adjovi", "Adjovi Godomey"],
+    "type": "ENTREPRISE_TPS",
+    "ifu": "9900000000033",
+    "adresse": "Carrefour Godomey, Abomey-Calavi",
+    "telephone": "+229 01 00 00 03 33",
+    "aib_taux": 0,
+    "delai_paiement_jours": 0
+  },
+  {
+    "id": "C-004",
+    "nom": "Boutique Mama Adjovi (Fidjrossè)",
+    "alias": ["Mama Adjovi", "Adjovi Fidjrossè", "Adjovi Fidjrosse"],
+    "type": "ENTREPRISE_TPS",
+    "ifu": "9900000000041",
+    "adresse": "Fidjrossè plage, Cotonou",
+    "telephone": "+229 01 00 00 04 41",
+    "aib_taux": 0,
+    "delai_paiement_jours": 0
+  },
+  {
+    "id": "C-005",
+    "nom": "Hôtel Agossou Palace SA",
+    "alias": ["Agossou Palace", "hôtel Agossou", "hotel Agossou", "Hôtel Agossou"],
+    "type": "ENTREPRISE_REEL",
+    "ifu": "9900000000059",
+    "adresse": "Haie Vive, Cotonou",
+    "telephone": "+229 01 00 00 05 59",
+    "aib_taux": 5,
+    "delai_paiement_jours": 45
+  },
+  {
+    "id": "C-006",
+    "nom": "Cantine scolaire publique de Bohicon",
+    "alias": ["cantine de Bohicon", "cantine Bohicon", "Cantine scolaire de Bohicon"],
+    "type": "STRUCTURE_ETAT",
+    "ifu": "9900000000067",
+    "adresse": "Bohicon",
+    "telephone": "+229 01 00 00 06 67",
+    "aib_taux": 0,
+    "delai_paiement_jours": 60
+  },
+  {
+    "id": "C-007",
+    "nom": "Gbaguidi Import-Export",
+    "alias": ["Gbaguidi", "Gbaguidi import", "Ets Gbaguidi"],
+    "type": "ENTREPRISE_REEL",
+    "ifu": "9900000000075",
+    "adresse": "Zone portuaire, Cotonou",
+    "telephone": "+229 01 00 00 07 75",
+    "aib_taux": 1,
+    "delai_paiement_jours": 30
+  },
+  {
+    "id": "C-008",
+    "nom": "Mme Chabi Rachida",
+    "alias": ["Chabi", "Rachida", "Mme Chabi", "Chabi Rachida"],
+    "type": "PARTICULIER",
+    "ifu": null,
+    "adresse": "Parakou",
+    "telephone": "+229 01 00 00 08 83",
+    "aib_taux": 0,
+    "delai_paiement_jours": 0
+  },
+  {
+    "id": "C-009",
+    "nom": "Restaurant Le Palmier Sossou SARL",
+    "alias": ["Sossou", "Restaurant Sossou", "Le Palmier Sossou", "resto Sossou"],
+    "type": "ENTREPRISE_REEL",
+    "ifu": "9900000000091",
+    "adresse": "Akpakpa, Cotonou",
+    "telephone": "+229 01 00 00 09 91",
+    "aib_taux": 1,
+    "delai_paiement_jours": 30
+  },
+  {
+    "id": "C-010",
+    "nom": "Boulangerie-Pâtisserie Kpadonou SA",
+    "alias": ["Kpadonou", "Boulangerie Kpadonou", "Pâtisserie Kpadonou"],
+    "type": "ENTREPRISE_REEL",
+    "ifu": "9900000000108",
+    "adresse": "Ouando, Porto-Novo",
+    "telephone": "+229 01 00 00 10 08",
+    "aib_taux": 5,
+    "delai_paiement_jours": 30
+  },
+  {
+    "id": "C-011",
+    "nom": "Alimentation Tantie Akpovi",
+    "alias": ["Akpovi", "Tantie Akpovi", "Alimentation Akpovi"],
+    "type": "ENTREPRISE_TPS",
+    "ifu": "9900000000116",
+    "adresse": "Zogbadjè, Abomey-Calavi",
+    "telephone": "+229 01 00 00 11 16",
+    "aib_taux": 0,
+    "delai_paiement_jours": 15
+  },
+  {
+    "id": "C-012",
+    "nom": "Dépôt Boissons Orou & Fils",
+    "alias": ["Orou", "Dépôt Orou", "Dah Orou", "Orou Parakou"],
+    "type": "ENTREPRISE_TPS",
+    "ifu": "9900000000124",
+    "adresse": "Marché Arzèkè, Parakou",
+    "telephone": "+229 01 00 00 12 24",
+    "aib_taux": 0,
+    "delai_paiement_jours": 15
+  },
+  {
+    "id": "C-013",
+    "nom": "M. Zinsou Aristide",
+    "alias": ["Zinsou", "Aristide Zinsou", "M. Zinsou"],
+    "type": "PARTICULIER",
+    "ifu": null,
+    "adresse": "Cadjèhoun, Cotonou",
+    "telephone": "+229 01 00 00 13 32",
+    "aib_taux": 0,
+    "delai_paiement_jours": 0
+  },
+  {
+    "id": "C-014",
+    "nom": "Mme Hounkpatin Clarisse",
+    "alias": ["Hounkpatin", "Clarisse Hounkpatin", "Mme Hounkpatin"],
+    "type": "PARTICULIER",
+    "ifu": null,
+    "adresse": "Fidjrossè, Cotonou",
+    "telephone": "+229 01 00 00 14 40",
+    "aib_taux": 0,
+    "delai_paiement_jours": 0
+  },
+  {
+    "id": "C-015",
+    "nom": "Société Lomé Négoce Distribution",
+    "alias": ["Lomé Négoce", "Lome Negoce", "Société Lomé Négoce"],
+    "type": "CLIENT_EXPORT",
+    "ifu": "9900000000157",
+    "adresse": "Grand Marché, Lomé (Togo)",
+    "telephone": "+228 90 00 00 15",
+    "aib_taux": 0,
+    "delai_paiement_jours": 30
+  }
 ]

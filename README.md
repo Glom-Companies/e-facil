@@ -183,6 +183,7 @@ Paramètres modifiables : seuil de prix inhabituel (15 %), fenêtre de doublon (
 | google-genai (SDK) | Apache 2.0 |
 | Modèle Gemini (API Google AI Studio) | Conditions d'utilisation de Google |
 | Groq (API, modèles `gpt-oss-120b` et `llama-3.3-70b-versatile`) | Conditions de Groq ; Apache 2.0 et licence Llama 3.3 |
+| Musique de la vidéo de démonstration (piano) | Composition originale générée par programme pour le projet : aucun morceau ni échantillon existant |
 | Ollama / modèle local (option) | MIT / licence du modèle choisi |
 
 L'interface fonctionne sans internet : feuille de style et police sont servies par l'application.

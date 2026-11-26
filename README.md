@@ -5,7 +5,7 @@
 Une PME béninoise reçoit une commande par WhatsApp, SMS, e-mail ou photo. Le prototype :
 1. lit le message et propose un brouillon. Chaque champ affiche le passage du message dont il vient et un niveau de confiance ; une information absente reste vide ;
 2. contrôle le brouillon : client et articles connus, prix habituels, écart entre commande et livraison, doublon, total annoncé, remise, consigne suspecte ;
-3. calcule les montants de façon déterministe, selon les règles e-MECeF de la DGI : prix TTC, groupes de taxe, TVA à 18 %, AIB, net à payer ;
+3. calcule les montants de façon déterministe, selon les règles e-MECeF de la DGI : prix TTC, groupes de taxe, TVA (18 % par défaut, réglable), AIB, net à payer ;
 4. fait valider la facture par un responsable. Elle reçoit alors un numéro sans trou et devient non modifiable ;
 5. l'émet vers une **DGI simulée**, produit le PDF, puis gère les avoirs, les paiements simulés, le journal d'audit et la comptabilité.
 
@@ -14,7 +14,8 @@ Une PME béninoise reçoit une commande par WhatsApp, SMS, e-mail ou photo. Le p
 ## Démarrage rapide (Windows, PowerShell)
 
 ```powershell
-cd facturation-pme
+git clone https://github.com/Glom-Companies/e-facil.git
+cd e-facil
 python -m venv .venv
 .\.venv\Scripts\python -m pip install -r requirements.txt
 copy .env.exemple .env
@@ -22,6 +23,8 @@ copy .env.exemple .env
 ```
 
 Ouvrir http://localhost:8000. Sous Linux ou macOS, remplacez `.\.venv\Scripts\python` par `.venv/bin/python`.
+
+Toutes les variables sont décrites et commentées dans `.env.exemple`. Sans aucune clé, l'application fonctionne entièrement, avec la lecture par règles simples.
 
 ### Comptes de démonstration
 
@@ -39,7 +42,7 @@ Le mot de passe est `demo2026` pour tous les comptes (variable `DEMO_MOT_DE_PASS
 Sans clé, l'application utilise la lecture par **règles simples** (sans IA). Pour activer l'IA :
 1. Créez une clé gratuite sur Google AI Studio, sans activer la facturation.
 2. Collez-la dans `.env` : `GEMINI_API_KEY=...`.
-3. Relancez l'application. Le choix « IA Gemini » devient le choix par défaut.
+3. Relancez l'application. Le choix de l'IA se fait côté serveur : Groq d'abord s'il est configuré, puis Gemini, puis le modèle local (variable `IA_ORDRE`).
 
 Sur le palier gratuit, Google peut utiliser les contenus envoyés pour améliorer ses services : **n'envoyez que des données fictives**.
 
@@ -47,11 +50,11 @@ Sur le palier gratuit, Google peut utiliser les contenus envoyés pour améliore
 1. Créez une clé sur console.groq.com, sans carte bancaire.
 2. Collez-la dans `.env` : `GROQ_API_KEY=...`.
 
-Vérifiez vos clés en un appel : `.venv/bin/python -m eval.verifier_ia`.
+Vérifiez vos clés en un appel : `.\.venv\Scripts\python -m eval.verifier_ia`.
 
 **Repli automatique.** Chaque IA réessaie après un quota (429) ou une surcharge (503), puis passe à son modèle de secours (`GEMINI_MODELES_SECOURS`, `GROQ_MODELES_SECOURS`). Si elle échoue encore, l'autre IA prend le relais, puis les règles simples. Le dossier affiche alors un avertissement, et le journal note le repli. Une photo ou un PDF seul ne peut être lu que par Gemini.
 
-En option, un modèle local avec Ollama : `ollama pull qwen2.5:7b`, puis choisissez « IA locale ». Aucune donnée ne quitte alors la machine.
+En option, un modèle local avec Ollama : `ollama pull qwen2.5:7b`, puis `OLLAMA_ACTIF=1` dans `.env`. Aucune donnée ne quitte alors la machine.
 
 ## Canaux, voix et espaces d'entreprise
 
@@ -129,7 +132,9 @@ Le script compte les champs justes, les valeurs inventées, les champs laissés 
 app/
   moteur.py      calculs purs : lignes, groupes de taxe, TVA, AIB, net à payer (Decimal, jamais de float)
   texte.py       lecture des montants (« 17.500 », « 17k ») et des quantités, citations
-  extraction.py  extracteurs interchangeables : règles, Gemini, Ollama ; sortie structurée avec citations
+  extraction.py  extracteurs interchangeables : règles, Groq, Gemini, Ollama ; sortie structurée avec citations
+  voix.py        transcription des notes vocales (micro, WhatsApp)
+  canaux.py      bot WhatsApp simulé : webhook signé, numéros habilités, mode guidé
   brouillon.py   vérification des citations, rapprochement des référentiels, anomalies
   services.py    opérations métier, droits, transactions, idempotence, DGI simulée, avoirs, paiements
   db.py          SQLite : schéma, déclencheurs d'immutabilité, numérotation sans trou, journal chaîné

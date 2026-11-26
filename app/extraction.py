@@ -207,38 +207,54 @@ def extraire_gemini(texte: str, octets: bytes | None = None, mime: str | None = 
     cle_api = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
     if not cle_api:
         raise ErreurExtraction("Clé GEMINI_API_KEY absente : renseignez-la dans le fichier .env.")
-    modele = os.environ.get("GEMINI_MODELE", "gemini-2.5-flash")
+    modele = os.environ.get("GEMINI_MODELE", "gemini-3.8-flash")
     cle = _cle_cache("gemini", modele, texte, octets)
     cache = _lire_cache()
     if cle in cache:
         return cache[cle]
 
     from google import genai
-    from google.genai import types
+    from google.genai import errors, types
 
-    client = genai.Client(api_key=cle_api)
+    # Délai maximal par appel et une seule nouvelle tentative rapide : l'utilisateur ne doit jamais attendre sans fin.
+    client = genai.Client(api_key=cle_api, http_options=types.HttpOptions(
+        timeout=int(os.environ.get("GEMINI_DELAI_MS", "25000")),
+        retry_options=types.HttpRetryOptions(attempts=1)))
     contenu: list = []
     if octets:
         contenu.append(types.Part.from_bytes(data=octets, mime_type=mime or "application/octet-stream"))
         contenu.append("Document joint ci-dessus. Recopie d'abord son texte intégral dans « transcription ».")
     if texte:
         contenu.append("DOCUMENT :\n<<<\n" + texte + "\n>>>")
-    try:
-        reponse = client.models.generate_content(
-            model=modele,
-            contents=contenu,
-            config=types.GenerateContentConfig(
-                system_instruction=CONSIGNE,
-                temperature=0,
-                response_mime_type="application/json",
-                response_schema=ResultatExtraction,
-            ),
-        )
-        resultat = ResultatExtraction.model_validate_json(reponse.text).model_dump()
-    except Exception as e:  # réseau, quota, réponse invalide
-        raise ErreurExtraction(f"Échec de l'extraction Gemini : {e}") from e
-    _ecrire_cache(cle, resultat)
-    return resultat
+    secours = [m.strip() for m in os.environ.get("GEMINI_MODELES_SECOURS", "gemini-3.5-flash-lite,gemini-3.1-flash-lite").split(",")
+               if m.strip() and m.strip() != modele]
+    derniere_erreur = None
+    for nom_modele in [modele] + secours:
+        try:
+            reponse = client.models.generate_content(
+                model=nom_modele,
+                contents=contenu,
+                config=types.GenerateContentConfig(
+                    system_instruction=CONSIGNE,
+                    temperature=0,
+                    response_mime_type="application/json",
+                    response_schema=ResultatExtraction,
+                ),
+            )
+            resultat = ResultatExtraction.model_validate_json(reponse.text).model_dump()
+            resultat["_modele"] = nom_modele
+            _ecrire_cache(cle, resultat)
+            return resultat
+        except errors.APIError as e:
+            derniere_erreur = e
+            if e.code in (429, 500, 503, 504, 404):  # surcharge, quota ou modèle retiré : modèle suivant
+                continue
+            break
+        except Exception as e:  # délai dépassé, réseau, réponse invalide
+            derniere_erreur = e
+            continue
+    raise ErreurExtraction("L'IA Gemini ne répond pas pour le moment (surcharge ou quota). "
+                           f"Réessayez, ou choisissez la lecture par règles simples. Détail : {str(derniere_erreur)[:160]}")
 
 
 # --- Extracteur Ollama (local) -------------------------------------------------------

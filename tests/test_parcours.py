@@ -259,3 +259,17 @@ def test_recherche(conn):
     assert r["factures"] and r["factures"][0]["contenu"]["client"]["nom"].startswith("Supermarché Houngbédji")
     assert S.rechercher(conn, "FV-2026-000003")["factures"][0]["numero"] == "FV-2026-000003"
     assert any(d["client"] == "Ets Dossou et Frères" for d in S.rechercher(conn, "Dossou")["dossiers"])
+
+
+def test_vue_comptable_equilibree(conn):
+    """Comptes en T équilibrés (411 = 701 + 4431), encaissé + à encaisser = net facturé, ancienneté calculée."""
+    from app import demo
+    demo.charger(conn)
+    vc = S.vue_comptable(conn)
+    c = vc["comptes"]
+    assert c["411"]["debit"] - c["411"]["credit"] == (c["701"]["credit"] - c["701"]["debit"]) + (c["4431"]["credit"] - c["4431"]["debit"])
+    net = sum(r[0] for r in conn.execute("SELECT net_a_payer FROM factures WHERE type='FV' AND statut='CONFIRMEE'"))
+    assert vc["encaisse"] + vc["a_encaisser"] == net
+    assert vc["nb_impayees"] == 3 and all(f["jours"] >= 1 for f in vc["impayees"])
+    assert vc["impayees"] == sorted(vc["impayees"], key=lambda f: -f["jours"])
+    assert len(S.jours_avec_activite(conn)) == 5

@@ -440,3 +440,101 @@ details.card[open]>summary.card-header{border-radius:var(--rayon) var(--rayon) 0
   .connexion-formulaire{padding:2rem 1.25rem;align-items:flex-start}
   .formulaire-interieur h1{font-size:2.1rem}
 }
+
+/* --- Comptabilité ---------------------------------------------------------------------- */
+.tresorerie{display:grid;grid-template-columns:repeat(2,minmax(0,1fr)) minmax(220px,.75fr);gap:1.25rem;align-items:stretch}
+.carte-bancaire{position:relative;overflow:hidden;border-radius:20px;padding:1.4rem 1.5rem;color:#fff;min-height:220px;display:flex;flex-direction:column;
+  box-shadow:0 18px 40px rgba(25,28,31,.18);isolation:isolate}
+.carte-bancaire::before,.carte-bancaire::after{content:"";position:absolute;border-radius:50%;z-index:-1}
+.carte-bancaire::before{width:280px;height:280px;right:-90px;top:-120px;background:rgba(255,255,255,.10)}
+.carte-bancaire::after{width:220px;height:220px;right:40px;bottom:-150px;background:rgba(255,255,255,.07)}
+.cb-sarcelle{background:linear-gradient(135deg,#1F9184 0%,#167a6f 55%,#0f5a52 100%)}
+.cb-nuit{background:linear-gradient(135deg,#2b3036 0%,#191C1F 60%,#0e1012 100%)}
+.cb-haut{display:flex;justify-content:space-between;align-items:center}
+.cb-libelle{font-size:.85rem;font-weight:600;opacity:.85;letter-spacing:.02em}
+.cb-marque{font-weight:800;font-size:1.05rem;letter-spacing:-.01em}
+.cb-marque b{color:#9fe0d6}
+.cb-nuit .cb-marque b{color:#5ec4b6}
+.cb-puce-ligne{display:flex;align-items:center;gap:.8rem;margin:1rem 0 .4rem;opacity:.9}
+.cb-puce{width:44px;height:33px;border-radius:7px;background:linear-gradient(135deg,#f3d58a,#c9a24b);position:relative;box-shadow:inset 0 0 0 1px rgba(0,0,0,.12)}
+.cb-puce::before{content:"";position:absolute;inset:7px 9px;border:1.5px solid rgba(90,60,10,.35);border-radius:4px}
+.cb-puce::after{content:"";position:absolute;left:50%;top:0;bottom:0;border-left:1.5px solid rgba(90,60,10,.3)}
+.cb-montant{font-size:2.1rem;font-weight:800;letter-spacing:-.01em;font-variant-numeric:tabular-nums;line-height:1.1}
+.cb-numero{font-family:ui-monospace,Consolas,monospace;font-size:1.05rem;letter-spacing:.18em;opacity:.85;margin-top:.5rem}
+.cb-progression{height:6px;border-radius:999px;background:rgba(255,255,255,.18);margin-top:.85rem;overflow:hidden}
+.cb-progression span{display:block;height:100%;background:#5ec4b6;border-radius:999px}
+.cb-bas{display:flex;justify-content:space-between;gap:1rem;margin-top:auto;padding-top:1rem}
+.cb-bas span{display:block;font-size:.68rem;text-transform:uppercase;letter-spacing:.08em;opacity:.7}
+.cb-bas strong{display:block;font-size:.9rem;font-weight:600;max-width:240px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+.jauge-carte .card-body{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;height:100%}
+.jauge{--pct:0;width:140px;height:140px;border-radius:50%;display:grid;place-items:center;
+  background:radial-gradient(closest-side,#fff 78%,transparent 79% 100%),conic-gradient(var(--graph) calc(var(--pct)*1%),#e6ecef 0)}
+.jauge-val{font-size:2rem;font-weight:800;font-variant-numeric:tabular-nums}
+.jauge-val small{font-size:1rem;color:var(--gris);margin-left:2px}
+
+.ticket-zone{display:flex;flex-direction:column;align-items:center;gap:.75rem;height:100%}
+.ticket-nav{display:flex;align-items:center;justify-content:space-between;gap:.75rem;width:100%;max-width:400px;font-weight:600;font-size:.92rem}
+.ticket-nav a,.ticket-nav .inactif{display:grid;place-items:center;width:34px;height:34px;border-radius:10px;background:#fff;border:1px solid var(--trait);color:var(--encre)}
+.ticket-nav a:hover{border-color:var(--vert);color:var(--vert)}
+.ticket-nav .inactif{opacity:.35}
+.ticket{position:relative;width:100%;max-width:400px;background:#fff;padding:1.5rem 1.4rem 1.6rem;font-family:ui-monospace,Consolas,"Cascadia Mono",monospace;font-size:.82rem;color:#2a2f35;
+  filter:drop-shadow(0 6px 14px rgba(25,28,31,.10));
+  -webkit-mask:conic-gradient(from -45deg at bottom,#0000,#000 1deg 89deg,#0000 90deg) bottom/16px 51% repeat-x,
+               conic-gradient(from 135deg at top,#0000,#000 1deg 89deg,#0000 90deg) top/16px 51% repeat-x;
+          mask:conic-gradient(from -45deg at bottom,#0000,#000 1deg 89deg,#0000 90deg) bottom/16px 51% repeat-x,
+               conic-gradient(from 135deg at top,#0000,#000 1deg 89deg,#0000 90deg) top/16px 51% repeat-x}
+.ticket-entete{display:flex;flex-direction:column;align-items:center;text-align:center;gap:.1rem;padding-bottom:.8rem;border-bottom:1.5px dashed #c9ced3;margin-bottom:.6rem}
+.ticket-entete strong{font-size:.95rem}
+.ticket-simu{margin-top:.3rem;color:var(--ambre);font-weight:700}
+.ticket-section{margin:.8rem 0 .3rem;font-weight:700;letter-spacing:.04em;color:#5d646b}
+.ticket-ligne{display:flex;justify-content:space-between;gap:1rem;padding:.12rem 0}
+.ticket-ligne span:last-child{font-variant-numeric:tabular-nums;white-space:nowrap}
+.ticket-ligne.petit{color:#7a8188;font-size:.76rem}
+.ticket-total{display:flex;justify-content:space-between;margin-top:.9rem;padding-top:.7rem;border-top:1.5px dashed #c9ced3;font-weight:800;font-size:1rem}
+.ticket-pied{text-align:center;color:#7a8188;font-size:.74rem;margin-top:.9rem}
+.ticket-vide{text-align:center;color:#7a8188;margin:1.2rem 0 .4rem}
+
+.releve{list-style:none;margin:0;padding:0}
+.releve li{display:flex;align-items:center;gap:.9rem;padding:.85rem 1.25rem}
+.releve li+li{border-top:1px solid var(--trait)}
+.releve-ico{width:42px;height:42px;border-radius:12px;background:var(--vert-pale);color:var(--vert);display:grid;place-items:center;flex:none}
+.releve-corps{flex:1;min-width:0}
+.releve-corps strong{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.releve-corps>span{display:block;color:var(--gris);font-size:.8rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.releve-droite{text-align:right;flex:none}
+.releve-droite strong{display:block;color:var(--vert-fonce);font-variant-numeric:tabular-nums}
+.releve-droite span{display:block;color:var(--gris-clair);font-size:.76rem}
+
+.comptes-t{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1rem}
+.compte-t{border:1px solid var(--trait);border-radius:14px;padding:1rem;background:linear-gradient(#fff,#fbfcfc)}
+.ct-titre{display:flex;flex-direction:column;font-weight:600;font-size:.9rem;padding-bottom:.6rem;border-bottom:2px solid var(--encre);text-align:center}
+.ct-titre .mono{font-size:1.15rem;font-weight:700;color:var(--vert-fonce)}
+.ct-corps{display:grid;grid-template-columns:1fr 1fr}
+.ct-corps>div{display:flex;flex-direction:column;align-items:center;padding:.7rem .3rem;gap:.15rem}
+.ct-corps>div:first-child{border-right:2px solid var(--encre)}
+.ct-sens{font-size:.7rem;text-transform:uppercase;letter-spacing:.06em;color:var(--gris)}
+.ct-val{font-weight:700;font-variant-numeric:tabular-nums;font-size:.92rem;white-space:nowrap}
+.ct-solde{text-align:center;font-size:.78rem;color:var(--gris);background:var(--panneau);border-radius:8px;padding:.35rem;margin-top:.3rem}
+.ct-solde strong{color:var(--encre);font-variant-numeric:tabular-nums}
+
+.impayees{list-style:none;margin:0;padding:0}
+.impayees li+li{border-top:1px solid var(--trait)}
+.impayees a{display:flex;flex-direction:column;gap:.3rem;padding:.9rem 1.25rem;color:var(--encre);text-decoration:none}
+.impayees a:hover{background:var(--panneau)}
+.imp-haut,.imp-bas{display:flex;justify-content:space-between;align-items:center;gap:.75rem}
+.imp-haut strong{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.imp-reste{font-weight:700;color:var(--rouge);font-variant-numeric:tabular-nums;white-space:nowrap}
+.imp-bas{font-size:.8rem;color:var(--gris)}
+.anciennete{font-size:.72rem;font-weight:600;border-radius:999px;padding:.1rem .55rem;background:var(--panneau);color:var(--gris)}
+.anciennete.a-ambre{background:var(--ambre-pale);color:var(--ambre)}
+.anciennete.a-rouge{background:var(--rouge-pale);color:var(--rouge)}
+.imp-barre{height:6px;border-radius:999px;background:#e6ecef;overflow:hidden;margin-top:.2rem}
+.imp-barre span{display:block;height:100%;background:var(--graph);border-radius:999px}
+.imp-pct{font-size:.74rem;color:var(--gris-clair)}
+
+@media (max-width:1199px){.tresorerie{grid-template-columns:repeat(2,minmax(0,1fr))}.jauge-carte{grid-column:1/-1}}
+@media (max-width:767px){.tresorerie{grid-template-columns:1fr}.comptes-t{grid-template-columns:1fr}.cb-montant{font-size:1.75rem}}
+
+.equilibre{display:inline-flex;align-items:center;gap:.35rem;font-size:.78rem;font-weight:600;color:var(--vert-fonce);background:var(--vert-pale);border-radius:999px;padding:.3rem .7rem;white-space:nowrap}
+.equilibre.desequilibre{color:var(--rouge);background:var(--rouge-pale)}

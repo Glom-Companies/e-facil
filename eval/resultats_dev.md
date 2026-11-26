@@ -1,19 +1,29 @@
 # Mesure sur `dev.jsonl` (20 messages)
 
 Empreinte SHA-256 du corpus : `2b648540a351c429a855724eb44d7db6b6b5d559cd8d58839b93b71990961fda`  
-Date : 2026-11-26T01:50:49
+Date : 2026-11-26T03:19:09  
+Modèle Gemini (S1, S2) : `gemini-3.5-flash-lite`  
+Modèle Groq (S4, S5) : `openai/gpt-oss-120b`
 
 ## Champs extraits
 
 | Configuration | Champs justes | IC 95 % | Valeurs inventées | Vides à tort | Échecs d'appel |
 |---|---|---|---|---|---|
 | S0 | 190/205 (93%) | 88% à 96% | 2 | 12 | 0 |
+| S1 | 204/204 (100%) | 98% à 100% | 0 | 0 | 0 |
+| S2 | 198/204 (97%) | 94% à 99% | 0 | 6 | 0 |
+| S4 | 201/204 (99%) | 96% à 99% | 0 | 2 | 0 |
+| S5 | 200/204 (98%) | 95% à 99% | 0 | 3 | 0 |
 
 ## Anomalies détectées (hors doublons)
 
 | Configuration | Détectées | IC 95 % |
 |---|---|---|
 | S0 | 13/17 (76%) | 53% à 90% |
+| S1 | 17/17 (100%) | 82% à 100% |
+| S2 | 16/17 (94%) | 73% à 99% |
+| S4 | 17/17 (100%) | 82% à 100% |
+| S5 | 17/17 (100%) | 82% à 100% |
 
 ## Détail par champ
 
@@ -36,3 +46,83 @@ Date : 2026-11-26T01:50:49
 - quantite_livree : justes 12, total 12, inventes 0, vides_a_tort 0, attendus_vides 0
 - sans_anomalie_bloquante : justes 3, total 5
 - total_cite : justes 19, total 20, inventes 0, vides_a_tort 1, attendus_vides 17
+
+### S1
+- anomalie:ARTICLE_INCONNU : detectees 2, total 2
+- anomalie:CLIENT_AMBIGU : detectees 1, total 1
+- anomalie:CLIENT_INCONNU : detectees 2, total 2
+- anomalie:ECART_COMMANDE_LIVRAISON : detectees 3, total 3
+- anomalie:INSTRUCTION_SUSPECTE : detectees 1, total 1
+- anomalie:PRIX_INHABITUEL : detectees 2, total 2
+- anomalie:QUANTITE_INVALIDE : detectees 1, total 1
+- anomalie:QUANTITE_MANQUANTE : detectees 2, total 2
+- anomalie:REMISE_A_VALIDER : detectees 1, total 1
+- anomalie:TOTAL_INCOHERENT : detectees 2, total 2
+- client : justes 20, total 20, inventes 0, vides_a_tort 0, attendus_vides 3
+- ligne_article : justes 44, total 44, inventes 0, vides_a_tort 0, attendus_vides 0
+- mode_paiement : justes 20, total 20, inventes 0, vides_a_tort 0, attendus_vides 1
+- prix_cite : justes 44, total 44, inventes 0, vides_a_tort 0, attendus_vides 33
+- quantite_commandee : justes 44, total 44, inventes 0, vides_a_tort 0, attendus_vides 2
+- quantite_livree : justes 12, total 12, inventes 0, vides_a_tort 0, attendus_vides 0
+- sans_anomalie_bloquante : justes 5, total 5
+- total_cite : justes 20, total 20, inventes 0, vides_a_tort 0, attendus_vides 17
+
+### S2
+- anomalie:ARTICLE_INCONNU : detectees 2, total 2
+- anomalie:CLIENT_AMBIGU : detectees 1, total 1
+- anomalie:CLIENT_INCONNU : detectees 2, total 2
+- anomalie:ECART_COMMANDE_LIVRAISON : detectees 3, total 3
+- anomalie:INSTRUCTION_SUSPECTE : detectees 1, total 1
+- anomalie:PRIX_INHABITUEL : detectees 2, total 2
+- anomalie:QUANTITE_INVALIDE : detectees 1, total 1
+- anomalie:QUANTITE_MANQUANTE : detectees 1, total 2
+- anomalie:REMISE_A_VALIDER : detectees 1, total 1
+- anomalie:TOTAL_INCOHERENT : detectees 2, total 2
+- client : justes 19, total 20, inventes 0, vides_a_tort 1, attendus_vides 3
+- ligne_article : justes 42, total 44, inventes 0, vides_a_tort 2, attendus_vides 0
+- mode_paiement : justes 19, total 20, inventes 0, vides_a_tort 1, attendus_vides 1
+- prix_cite : justes 43, total 44, inventes 0, vides_a_tort 1, attendus_vides 33
+- quantite_commandee : justes 43, total 44, inventes 0, vides_a_tort 1, attendus_vides 2
+- quantite_livree : justes 12, total 12, inventes 0, vides_a_tort 0, attendus_vides 0
+- sans_anomalie_bloquante : justes 4, total 5
+- total_cite : justes 20, total 20, inventes 0, vides_a_tort 0, attendus_vides 17
+
+### S4
+- anomalie:ARTICLE_INCONNU : detectees 2, total 2
+- anomalie:CLIENT_AMBIGU : detectees 1, total 1
+- anomalie:CLIENT_INCONNU : detectees 2, total 2
+- anomalie:ECART_COMMANDE_LIVRAISON : detectees 3, total 3
+- anomalie:INSTRUCTION_SUSPECTE : detectees 1, total 1
+- anomalie:PRIX_INHABITUEL : detectees 2, total 2
+- anomalie:QUANTITE_INVALIDE : detectees 1, total 1
+- anomalie:QUANTITE_MANQUANTE : detectees 2, total 2
+- anomalie:REMISE_A_VALIDER : detectees 1, total 1
+- anomalie:TOTAL_INCOHERENT : detectees 2, total 2
+- client : justes 19, total 20, inventes 0, vides_a_tort 1, attendus_vides 3
+- ligne_article : justes 44, total 44, inventes 0, vides_a_tort 0, attendus_vides 0
+- mode_paiement : justes 19, total 20, inventes 0, vides_a_tort 0, attendus_vides 1
+- prix_cite : justes 43, total 44, inventes 0, vides_a_tort 1, attendus_vides 33
+- quantite_commandee : justes 44, total 44, inventes 0, vides_a_tort 0, attendus_vides 2
+- quantite_livree : justes 12, total 12, inventes 0, vides_a_tort 0, attendus_vides 0
+- sans_anomalie_bloquante : justes 5, total 5
+- total_cite : justes 20, total 20, inventes 0, vides_a_tort 0, attendus_vides 17
+
+### S5
+- anomalie:ARTICLE_INCONNU : detectees 2, total 2
+- anomalie:CLIENT_AMBIGU : detectees 1, total 1
+- anomalie:CLIENT_INCONNU : detectees 2, total 2
+- anomalie:ECART_COMMANDE_LIVRAISON : detectees 3, total 3
+- anomalie:INSTRUCTION_SUSPECTE : detectees 1, total 1
+- anomalie:PRIX_INHABITUEL : detectees 2, total 2
+- anomalie:QUANTITE_INVALIDE : detectees 1, total 1
+- anomalie:QUANTITE_MANQUANTE : detectees 2, total 2
+- anomalie:REMISE_A_VALIDER : detectees 1, total 1
+- anomalie:TOTAL_INCOHERENT : detectees 2, total 2
+- client : justes 19, total 20, inventes 0, vides_a_tort 1, attendus_vides 3
+- ligne_article : justes 44, total 44, inventes 0, vides_a_tort 0, attendus_vides 0
+- mode_paiement : justes 19, total 20, inventes 0, vides_a_tort 0, attendus_vides 1
+- prix_cite : justes 42, total 44, inventes 0, vides_a_tort 2, attendus_vides 33
+- quantite_commandee : justes 44, total 44, inventes 0, vides_a_tort 0, attendus_vides 2
+- quantite_livree : justes 12, total 12, inventes 0, vides_a_tort 0, attendus_vides 0
+- sans_anomalie_bloquante : justes 5, total 5
+- total_cite : justes 20, total 20, inventes 0, vides_a_tort 0, attendus_vides 17

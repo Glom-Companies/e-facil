@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import base64
+from datetime import date
 import json
 import os
 import secrets
@@ -504,15 +505,22 @@ async def paiement(request: Request, fid: int):
 # --- Comptabilité, journal, référentiels, paramètres -------------------------------------------
 
 @app.get("/comptabilite", response_class=HTMLResponse)
-async def comptabilite(request: Request):
+async def comptabilite(request: Request, jour: str = ""):
     async def vue(request, c, u):
         S.exiger(u, "compta.lire")
-        impayees = []
-        for r in c.execute("SELECT id FROM factures WHERE type='FV' AND statut='CONFIRMEE' ORDER BY id"):
-            f = S.facture(c, r["id"])
-            if f["reste_a_payer"] > 0:
-                impayees.append(f)
-        return page(request, "comptabilite.html", c, u, rapport=S.rapport_du_jour(c), impayees=impayees)
+        actifs = S.jours_avec_activite(c)
+        try:
+            choisi = date.fromisoformat(jour) if jour else None
+        except ValueError:
+            choisi = None
+        if choisi is None:  # par défaut : aujourd'hui, ou le dernier jour d'activité s'il n'y en a pas aujourd'hui
+            aujourd = date.today().isoformat()
+            choisi = date.fromisoformat(aujourd if aujourd in actifs or not actifs else actifs[-1])
+        iso = choisi.isoformat()
+        precedent = max((j for j in actifs if j < iso), default=None)
+        suivant = min((j for j in actifs if j > iso), default=None)
+        return page(request, "comptabilite.html", c, u, rapport=S.rapport_du_jour(c, choisi), vc=S.vue_comptable(c),
+                    precedent=precedent, suivant=suivant, est_aujourdhui=choisi == date.today())
     return await avec_utilisateur(vue)(request)
 
 

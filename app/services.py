@@ -780,6 +780,52 @@ def rapport_du_jour(conn, jour: date | None = None) -> dict:
     return res
 
 
+def vue_comptable(conn, aujourd_hui: date | None = None) -> dict:
+    """Données de la page Comptabilité : trésorerie, encaissements récents, comptes en T, factures non payées.
+
+    Les comptes en T reprennent exactement les écritures de l'export CSV (411, 701, 4431).
+    """
+    jour = aujourd_hui or date.today()
+    comptes = {c: {"debit": 0, "credit": 0} for c in ("411", "701", "4431")}
+    for r in conn.execute("SELECT type, contenu FROM factures WHERE statut = 'CONFIRMEE'"):
+        t = json.loads(r["contenu"])["totaux"]
+        d, cr = ("debit", "credit") if r["type"] == "FV" else ("credit", "debit")
+        comptes["411"][d] += t["total_ttc"]
+        comptes["701"][cr] += t["total_ht"]
+        comptes["4431"][cr] += t["total_tva"]
+    for c in comptes.values():
+        c["solde"] = c["debit"] - c["credit"]
+
+    impayees, a_encaisser = [], 0
+    for r in conn.execute("SELECT id FROM factures WHERE type = 'FV' AND statut = 'CONFIRMEE' ORDER BY id").fetchall():
+        f = facture(conn, r["id"])
+        if f["reste_a_payer"] > 0:
+            emise = date.fromisoformat((f["horodatage_dgi"] or f["valide_le"])[:10])
+            f["jours"] = (jour - emise).days
+            f["pct_paye"] = round(100 * f["deja_paye"] / f["net_a_payer"]) if f["net_a_payer"] else 0
+            impayees.append(f)
+            a_encaisser += f["reste_a_payer"]
+    impayees.sort(key=lambda f: -f["jours"])
+
+    paiements = [dict(r) for r in conn.execute(
+        "SELECT p.*, f.numero, f.contenu FROM paiements p JOIN factures f ON f.id = p.facture_id "
+        "ORDER BY p.enregistre_le DESC, p.id DESC LIMIT 8")]
+    for p in paiements:
+        p["client"] = json.loads(p.pop("contenu"))["client"]["nom"]
+    encaisse = conn.execute("SELECT COALESCE(SUM(montant), 0) FROM paiements").fetchone()[0]
+    nb_paiements = conn.execute("SELECT COUNT(*) FROM paiements").fetchone()[0]
+    total = encaisse + a_encaisser
+    return {"encaisse": encaisse, "a_encaisser": a_encaisser, "nb_paiements": nb_paiements,
+            "nb_impayees": len(impayees), "taux": round(100 * encaisse / total) if total else 0,
+            "comptes": comptes, "impayees": impayees, "paiements": paiements}
+
+
+def jours_avec_activite(conn) -> list[str]:
+    """Jours (AAAA-MM-JJ) où au moins un document a été confirmé, du plus ancien au plus récent."""
+    return [r[0] for r in conn.execute("SELECT DISTINCT substr(horodatage_dgi, 1, 10) FROM factures "
+                                       "WHERE statut = 'CONFIRMEE' ORDER BY 1")]
+
+
 def export_ecritures_csv(conn) -> str:
     """Écritures proposées (à faire confirmer par un comptable) : 411 client, 70x produit, 443 TVA collectée."""
     sortie = io.StringIO()

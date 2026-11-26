@@ -3,17 +3,8 @@
 {% block public %}
 <div class="connexion">
   <section class="connexion-marque">
-    <div>
-      <span class="logo" style="padding:0 0 2.5rem">e-<span>FACIL</span></span>
-      <h1>De la commande reçue à la facture vérifiable.</h1>
-      <p>Collez le message WhatsApp, le SMS ou la photo du bon de commande. e-FACIL prépare la facture, vérifie tout et vous laisse décider.</p>
-      <ul class="atouts">
-        <li><i class="ti ti-quote" aria-hidden="true"></i><span><strong>Rien n'est inventé.</strong> Chaque information montre la phrase du client dont elle vient.</span></li>
-        <li><i class="ti ti-calculator" aria-hidden="true"></i><span><strong>Calculs justes.</strong> TVA, AIB et net à payer suivent les règles de la DGI.</span></li>
-        <li><i class="ti ti-lock" aria-hidden="true"></i><span><strong>Rien ne se perd.</strong> Une facture validée ne se modifie plus ; tout est tracé.</span></li>
-      </ul>
-    </div>
-    <p class="small mb-0">Équipe BillGenius · hackathon BWAI'2026 · démonstration avec données fictives</p>
+    <span class="logo logo-grand">e-<span>FACIL</span></span>
+    <p class="small mb-0">BillGenius · BWAI'2026</p>
   </section>
   <section class="connexion-form">
     <div class="boite">
@@ -25,7 +16,7 @@
         <input type="hidden" name="csrf" value="{{ csrf }}">
         <div class="mb-3">
           <label class="form-label" for="login">Identifiant</label>
-          <input class="form-control form-control-lg" id="login" name="login" required autofocus placeholder="aicha">
+          <input class="form-control form-control-lg" id="login" name="login" required autofocus>
         </div>
         <div class="mb-4">
           <label class="form-label" for="mdp">Mot de passe</label>
@@ -33,9 +24,8 @@
         </div>
         <button class="btn btn-primary btn-grand w-100" type="submit">Se connecter</button>
       </form>
-      <p class="text-secondary small mt-4 mb-2">Comptes de démonstration (mot de passe dans le README) :</p>
-      <div class="puces">
-        {% for c in comptes %}<button type="button" class="puce" data-login="{{ c.login }}">{{ c.nom }} · {{ ROLES[c.role] }}</button>{% endfor %}
+      <div class="puces mt-4">
+        {% for c in comptes %}<button type="button" class="puce" data-login="{{ c.login }}">{{ c.nom }}</button>{% endfor %}
       </div>
     </div>
   </section>

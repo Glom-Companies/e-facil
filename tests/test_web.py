@@ -23,7 +23,7 @@ def connecter(c, login):
     c.post("/deconnexion")
     page = c.get("/connexion").text
     r = c.post("/connexion", data={"login": login, "mot_de_passe": "demo2026", "csrf": csrf(page)})
-    assert r.status_code == 200 and "Bonjour" in r.text
+    assert r.status_code == 200 and "Se déconnecter" in r.text
 
 
 def champ(html, nom):
@@ -55,7 +55,7 @@ def test_parcours_complet(client):
     assert "aucun blocage" in page
     r = client.post(f"/dossiers/{did}/valider", data={"csrf": csrf(page), "version": champ(page, "version"),
                                                       "idem": champ(page, "idem")})
-    assert "verrouillé" in r.text and "FV-" in r.text
+    assert "Verrouillée" in r.text and "FV-" in r.text
     fid = re.search(r"/factures/(\d+)/emettre", r.text).group(1)
     r = client.post(f"/factures/{fid}/emettre", data={"csrf": csrf(r.text), "idem": champ(r.text, "idem")})
     assert "SIMU-" in r.text

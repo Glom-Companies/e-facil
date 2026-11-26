@@ -18,7 +18,7 @@
         <button class="btn btn-sm btn-primary" name="choix" value="facturer_livre">Facturer le livré</button>
       {% elif a.code == 'PRIX_INHABITUEL' %}
         <button class="btn btn-sm btn-primary" name="choix" value="prix_catalogue">Garder le prix du catalogue</button>
-        <input class="form-control form-control-sm" name="justification" placeholder="Justification pour appliquer le prix cité">
+        <input class="form-control form-control-sm" name="justification" placeholder="Justification">
         <button class="btn btn-sm btn-outline-secondary" name="choix" value="prix_cite">Appliquer le prix cité</button>
       {% elif a.code == 'TOTAL_INCOHERENT' %}
         <button class="btn btn-sm btn-primary" name="choix" value="total_recalcule">Facturer le total recalculé</button>
@@ -29,9 +29,7 @@
         <button class="btn btn-sm btn-outline-secondary" name="choix" value="refuser">Refuser</button>
       {% endif %}
     </form>
-    {% else %}<p class="small text-secondary mb-0"><i class="ti ti-lock"></i> Décision réservée au responsable.</p>{% endif %}
-  {% elif a.bloquante and not a.resolue and modifiable %}
-    <p class="small mb-0"><i class="ti ti-pencil"></i> À corriger dans le brouillon, à gauche.</p>
+    {% else %}<p class="small text-secondary mb-0"><i class="ti ti-lock"></i> Réservé au responsable</p>{% endif %}
   {% endif %}
 </div>
 {% endmacro %}
@@ -41,23 +39,23 @@
 <div class="entete-page">
   <div>
     <h1>{{ client_choisi.nom if client_choisi else (br.client.nom_cite or 'Client à préciser') }} <span class="etat etat-{{ d.statut }}">{{ STATUTS[d.statut] }}</span></h1>
-    <p class="sous"><i class="ti ti-message"></i> {{ CANAUX.get(d.canal, d.canal) }} · reçu le {{ d.cree_le|date_fr }} · lu par : {{ EXTRACTEURS.get(d.extracteur, d.extracteur) }}</p>
+    <p class="sous">{{ CANAUX.get(d.canal, d.canal) }} · {{ d.cree_le|date_fr }}</p>
   </div>
   {% if facture_id %}<a class="btn btn-primary" href="/factures/{{ facture_id }}"><i class="ti ti-file-invoice"></i>&nbsp;Voir la facture</a>{% endif %}
 </div>
 
 {% set etape = 4 if facture_statut == 'CONFIRMEE' else (3 if d.statut == 'VALIDE' else 2) %}
 <ol class="etapes">
-  <li class="fait"><span class="n"><i class="ti ti-check"></i></span><span><strong>Commande lue</strong>{{ br.lignes|length }} article(s) repéré(s)</span></li>
-  <li class="{{ 'fait' if etape > 2 else 'encours' }}"><span class="n">{% if etape > 2 %}<i class="ti ti-check"></i>{% else %}2{% endif %}</span><span><strong>Vérification</strong>{% if etape > 2 %}terminée{% elif bloquantes %}{{ bloquantes|length }} point(s) à régler{% else %}tout est en ordre{% endif %}</span></li>
-  <li class="{{ 'fait' if etape > 3 else ('encours' if etape == 3 else '') }}"><span class="n">{% if etape > 2 %}<i class="ti ti-check"></i>{% else %}3{% endif %}</span><span><strong>Validation</strong>{{ 'numérotée et verrouillée' if etape > 2 else 'par le responsable' }}</span></li>
-  <li class="{{ 'fait' if etape > 3 else '' }}"><span class="n">{% if etape > 3 %}<i class="ti ti-check"></i>{% else %}4{% endif %}</span><span><strong>Émission</strong>{{ 'confirmée par la DGI simulée' if etape > 3 else 'vers la DGI simulée' }}</span></li>
+  <li class="fait"><span class="n"><i class="ti ti-check"></i></span><span><strong>Lecture</strong></span></li>
+  <li class="{{ 'fait' if etape > 2 else 'encours' }}"><span class="n">{% if etape > 2 %}<i class="ti ti-check"></i>{% else %}2{% endif %}</span><span><strong>Vérification</strong>{% if etape == 2 and bloquantes %}{{ bloquantes|length }} à régler{% endif %}</span></li>
+  <li class="{{ 'fait' if etape > 3 else ('encours' if etape == 3 else '') }}"><span class="n">{% if etape > 2 %}<i class="ti ti-check"></i>{% else %}3{% endif %}</span><span><strong>Validation</strong></span></li>
+  <li class="{{ 'fait' if etape > 3 else '' }}"><span class="n">{% if etape > 3 %}<i class="ti ti-check"></i>{% else %}4{% endif %}</span><span><strong>Émission</strong></span></li>
 </ol>
 
 <div class="row g-4">
   <div class="col-xl-8">
     <!-- Message du client -->
-    <div class="titre-bloc"><h2>Ce que le client a envoyé</h2><span class="lien"><i class="ti ti-highlight"></i> surligné : ce que la lecture a utilisé</span></div>
+    <div class="titre-bloc"><h2>Message du client</h2></div>
     <div class="carte">
       <div class="row g-3">
         <div class="col-md-{{ '6' if d.texte_livraison or modifiable else '12' }}">
@@ -74,8 +72,8 @@
             <form method="post" action="/dossiers/{{ d.id }}/livraison">
               <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="version" value="{{ d.version }}">
               <input type="hidden" name="extracteur" value="{{ d.extracteur }}">
-              <textarea class="form-control mono" name="texte_livraison" rows="4" placeholder="Collez ici le bon de livraison signé, ou saisissez les quantités livrées dans le tableau."></textarea>
-              <button class="btn btn-outline-primary btn-sm mt-2" type="submit"><i class="ti ti-link"></i>&nbsp;Rattacher le bon de livraison</button>
+              <textarea class="form-control mono" name="texte_livraison" rows="4" placeholder="Collez le bon de livraison"></textarea>
+              <button class="btn btn-outline-primary btn-sm mt-2" type="submit"><i class="ti ti-link"></i>&nbsp;Rattacher</button>
             </form>
           {% endif %}
         </div>
@@ -84,7 +82,7 @@
     </div>
 
     <!-- Brouillon -->
-    <div class="titre-bloc mt-4"><h2>Brouillon de facture</h2>{% if modifiable %}<span class="lien"><i class="ti ti-history"></i> chaque correction est tracée</span>{% endif %}</div>
+    <div class="titre-bloc mt-4"><h2>Brouillon de facture</h2></div>
     <form method="post" action="/dossiers/{{ d.id }}/corriger" class="carte">
       <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="version" value="{{ d.version }}">
       <div class="row g-3 mb-3">
@@ -94,7 +92,7 @@
             <option value="">— Choisir le client —</option>
             {% for c in clients %}<option value="{{ c.id }}" {% if c.id == br.client.id %}selected{% endif %}>{{ c.nom }}{% if c.id in (br.client.candidats or []) and not br.client.id %} (proposé){% endif %}</option>{% endfor %}
           </select>
-          <span class="champ-cite">{% if br.client.citation %}<i class="ti ti-quote"></i> « {{ br.client.citation }} »{% else %}Non trouvé dans le message{% endif %}</span>
+          <span class="champ-cite">{% if br.client.citation %}<i class="ti ti-quote"></i> « {{ br.client.citation }} »{% else %}—{% endif %}</span>
           {% if client_choisi %}<span class="champ-cite">{{ aide('IFU') }} {{ client_choisi.ifu or 'non communiqué' }} · {{ client_choisi.adresse }}{% if client_choisi.aib_taux %} · retient l'{{ aide('AIB') }} à {{ client_choisi.aib_taux }} %{% endif %}</span>{% endif %}
         </div>
         <div class="col-md-5">
@@ -103,7 +101,7 @@
             <option value="">— Non précisé —</option>
             {% for k, v in PAIEMENTS.items() %}<option value="{{ k }}" {% if k == br.mode_paiement.valeur %}selected{% endif %}>{{ v }}</option>{% endfor %}
           </select>
-          <span class="champ-cite">{% if br.mode_paiement.citation %}<i class="ti ti-quote"></i> « {{ br.mode_paiement.citation }} »{% else %}Non précisé dans le message{% endif %}</span>
+          <span class="champ-cite">{% if br.mode_paiement.citation %}<i class="ti ti-quote"></i> « {{ br.mode_paiement.citation }} »{% else %}—{% endif %}</span>
         </div>
       </div>
       <div class="table-responsive">
@@ -129,7 +127,7 @@
           {% if modifiable %}<td data-label=""><label class="small text-secondary text-nowrap"><input type="checkbox" name="{{ l.cle }}:supprimer" value="1"> retirer</label></td>{% endif %}
         </tr>
         {% else %}
-        <tr><td colspan="6" class="vide">Aucun article reconnu. Ajoutez une ligne ci-dessous.</td></tr>
+        <tr><td colspan="6" class="vide">Aucun article</td></tr>
         {% endfor %}
         {% if modifiable %}
         <tr>
@@ -145,9 +143,8 @@
     </form>
 
     {% if br.rejets %}
-    <div class="titre-bloc mt-4"><h2>Valeurs écartées par le contrôle des citations</h2></div>
+    <div class="titre-bloc mt-4"><h2>Valeurs écartées</h2></div>
     <div class="carte small">
-      <p class="text-secondary">La lecture a proposé ces valeurs, mais elles ne figurent pas dans le message. Elles n'ont pas été reprises.</p>
       <ul class="mb-0">{% for r in br.rejets %}<li><strong>{{ r.champ }}</strong> : « {{ r.valeur }} » ({{ r.raison }})</li>{% endfor %}</ul>
     </div>
     {% endif %}
@@ -161,10 +158,10 @@
         {% for a in d.anomalies if a.bloquante and not a.resolue %}{{ anomalie(a) }}{% endfor %}
         {% for a in d.anomalies if not a.bloquante and not a.resolue %}{{ anomalie(a) }}{% endfor %}
         {% for a in d.anomalies if a.resolue %}{{ anomalie(a) }}{% endfor %}
-        {% if not d.anomalies %}<p class="vide mb-0"><i class="ti ti-shield-check"></i>Tous les contrôles sont passés.</p>{% endif %}
+        {% if not d.anomalies %}<p class="vide mb-0"><i class="ti ti-shield-check"></i>Aucune anomalie</p>{% endif %}
       </div>
 
-      <div class="titre-bloc mt-4"><h2>Montants</h2><span class="lien">calculés par e-FACIL, pas par l'IA</span></div>
+      <div class="titre-bloc mt-4"><h2>Montants</h2></div>
       <div class="carte">
         {% if d.totaux %}
         <table class="totaux">
@@ -177,7 +174,7 @@
           {% endif %}
           {% if br.total_cite.valeur %}<tr><td class="text-secondary small">Total annoncé par le client</td><td class="num small">{{ br.total_cite.valeur|fcfa }}</td></tr>{% endif %}
         </table>
-        {% else %}<p class="text-secondary mb-0 small">Les montants s'affichent quand le client, les articles et les quantités sont complets.</p>{% endif %}
+        {% else %}<p class="vide mb-0">—</p>{% endif %}
       </div>
 
       <div class="titre-bloc mt-4"><h2>Décision</h2></div>
@@ -188,12 +185,12 @@
             <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="version" value="{{ d.version }}">
             <input type="hidden" name="idem" value="{{ idem }}">
             {% if u.mode_solo and u.role == 'vendeur' %}
-            <label class="form-check mb-2"><input class="form-check-input" type="checkbox" required> <span class="form-check-label small">Mode solo : j'ai relu le client, les quantités et les montants.</span></label>
+            <label class="form-check mb-2"><input class="form-check-input" type="checkbox" required> <span class="form-check-label small">J'ai tout relu</span></label>
             {% endif %}
             <button class="btn btn-primary btn-grand w-100" type="submit" {% if bloquantes %}disabled{% endif %}><i class="ti ti-circle-check"></i>&nbsp;Valider et numéroter</button>
           </form>
-          <p class="small text-secondary mt-2 mb-3">{% if bloquantes %}Réglez d'abord les contrôles en rouge.{% else %}Après validation, la facture ne change plus ; une correction passera par un {{ aide('avoir') }}.{% endif %}</p>
-          {% else %}<p class="small text-secondary"><i class="ti ti-lock"></i> La validation est réservée au responsable. Il voit ce dossier dans « À vérifier ».</p>{% endif %}
+          <div class="mb-3"></div>
+          {% else %}<p class="small text-secondary"><i class="ti ti-lock"></i> Validation réservée au responsable</p>{% endif %}
           <div class="actions">
             <form method="post" action="/dossiers/{{ d.id }}/proforma"><input type="hidden" name="csrf" value="{{ csrf }}">
               <button class="btn btn-sm btn-outline-secondary" type="submit" {% if not d.totaux %}disabled{% endif %}><i class="ti ti-file-text"></i>&nbsp;Pro forma</button></form>

@@ -1,8 +1,7 @@
 {% extends "base.html" %}
 {% block titre %}Recherche{% endblock %}
 {% block contenu %}
-<div class="entete-page"><div><h1>Recherche{% if q %} : « {{ q }} »{% endif %}</h1>
-  <p class="sous">Par nom de client, numéro de facture, code DGI ou mot du message de commande.</p></div></div>
+<div class="entete-page"><div><h1>Recherche{% if q %} : « {{ q }} »{% endif %}</h1></div></div>
 {% if q|length < 2 %}
 <div class="carte"><p class="vide mb-0"><i class="ti ti-search"></i>Saisissez au moins deux caractères.</p></div>
 {% else %}

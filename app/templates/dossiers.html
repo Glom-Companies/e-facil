@@ -2,7 +2,7 @@
 {% block titre %}À vérifier{% endblock %}
 {% block contenu %}
 <div class="entete-page">
-  <div><h1>À vérifier</h1><p class="sous">Les commandes en brouillon et les factures validées qui attendent leur émission.</p></div>
+  <div><h1>À vérifier</h1></div>
   {% if u.role in ('vendeur','responsable') %}<a class="btn btn-primary" href="/dossiers/nouveau"><i class="ti ti-plus"></i>&nbsp;Nouvelle commande</a>{% endif %}
 </div>
 <div class="row g-4">

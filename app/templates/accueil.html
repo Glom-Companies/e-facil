@@ -2,15 +2,14 @@
 {% block titre %}Tableau de bord{% endblock %}
 {% block contenu %}
 <div class="row g-4">
-  <!-- Rangée 1 : trois cartes de synthèse -->
   <div class="col-lg-4 d-flex flex-column">
-    <div class="titre-bloc"><h2>Facturé ce mois</h2><a href="/comptabilite">Comptabilité <i class="ti ti-chevron-right"></i></a></div>
+    <div class="titre-bloc"><h2>Ce mois</h2></div>
     <div class="carte-accent flex-fill d-flex flex-column">
-      <div class="lib">Chiffre facturé TTC, avoirs déduits</div>
+      <div class="lib">Facturé TTC</div>
       <div class="gros">{{ tb.ca_mois|fcfa }}</div>
-      <div class="small mt-1" style="opacity:.9"><i class="ti ti-file-invoice"></i> {{ tb.factures_mois }} facture(s) confirmée(s) · cette semaine {{ tb.total_semaine|fcfa }}</div>
+      <div class="small" style="opacity:.85">{{ tb.factures_mois }} facture(s)</div>
       <div class="mt-auto pt-3">
-        <div class="d-flex justify-content-between small mb-1" style="opacity:.9"><span>Encaissé ce mois</span><strong>{{ tb.encaisse_mois|fcfa }} · {{ tb.taux_encaisse }} %</strong></div>
+        <div class="d-flex justify-content-between small mb-1" style="opacity:.9"><span>Encaissé</span><strong>{{ tb.encaisse_mois|fcfa }}</strong></div>
         <div style="height:8px;border-radius:4px;background:rgba(255,255,255,.25);overflow:hidden" role="img" aria-label="{{ tb.taux_encaisse }} % encaissé">
           <div style="height:100%;width:{{ [tb.taux_encaisse, 100]|min }}%;background:#fff;border-radius:4px"></div>
         </div>
@@ -18,38 +17,31 @@
     </div>
   </div>
   <div class="col-lg-4 d-flex flex-column">
-    <div class="titre-bloc"><h2>À faire maintenant</h2><a href="/dossiers">Tout voir <i class="ti ti-chevron-right"></i></a></div>
+    <div class="titre-bloc"><h2>À faire</h2><a href="/dossiers">Voir <i class="ti ti-chevron-right"></i></a></div>
     <div class="carte flex-fill">
       <ul class="liste">
-        <li><span class="icone-carre rouge"><i class="ti ti-alert-triangle"></i></span>
-          <div class="l-corps"><div class="l-titre">{{ brouillons|length - prets|length }} brouillon(s) à corriger</div><div class="l-sous">Contrôles bloquants à trancher</div></div></li>
-        <li><span class="icone-carre accent"><i class="ti ti-circle-check"></i></span>
-          <div class="l-corps"><div class="l-titre">{{ prets|length }} prêt(s) à valider</div><div class="l-sous">{% if u.role == 'responsable' %}Votre validation est attendue{% else %}En attente du responsable{% endif %}</div></div></li>
-        <li><span class="icone-carre ambre"><i class="ti ti-send"></i></span>
-          <div class="l-corps"><div class="l-titre">{{ tb.a_emettre + tb.en_attente_dgi }} facture(s) à émettre</div><div class="l-sous">Validées, pas encore confirmées par la DGI</div></div></li>
+        <li><span class="icone-carre rouge"><i class="ti ti-alert-triangle"></i></span><div class="l-corps l-titre">À corriger</div><div class="l-droite chiffre" style="font-size:1.2rem">{{ brouillons|length - prets|length }}</div></li>
+        <li><span class="icone-carre accent"><i class="ti ti-circle-check"></i></span><div class="l-corps l-titre">À valider</div><div class="l-droite chiffre" style="font-size:1.2rem">{{ prets|length }}</div></li>
+        <li><span class="icone-carre ambre"><i class="ti ti-send"></i></span><div class="l-corps l-titre">À émettre</div><div class="l-droite chiffre" style="font-size:1.2rem">{{ tb.a_emettre + tb.en_attente_dgi }}</div></li>
       </ul>
     </div>
   </div>
   <div class="col-lg-4 d-flex flex-column">
-    <div class="titre-bloc"><h2>À encaisser</h2><a href="/comptabilite">Détail <i class="ti ti-chevron-right"></i></a></div>
+    <div class="titre-bloc"><h2>À encaisser</h2><a href="/comptabilite">Voir <i class="ti ti-chevron-right"></i></a></div>
     <div class="carte flex-fill">
-      <div class="d-flex justify-content-between align-items-start">
-        <div><div class="chiffre">{{ tb.a_encaisser|fcfa }}</div><div class="sous-chiffre">{{ tb.impayees|length }} facture(s) non soldée(s)</div></div>
-        <span class="icone-carre accent"><i class="ti ti-cash"></i></span>
-      </div>
-      <ul class="liste mt-2">
+      <div class="chiffre">{{ tb.a_encaisser|fcfa }}</div>
+      <ul class="liste mt-1">
         {% for f in tb.impayees[:2] %}
         <li><span class="icone-carre" style="flex-direction:column;line-height:1;font-size:.7rem"><span>{{ f.echeance[8:10] }}</span><strong style="font-size:.7rem">{{ ['jan','fév','mar','avr','mai','jun','jul','aoû','sep','oct','nov','déc'][f.echeance[5:7]|int - 1] }}</strong></span>
           <a class="ligne-lien" href="/factures/{{ f.id }}"><div class="l-corps"><div class="l-titre">{{ f.client }}</div><div class="l-sous">{{ f.numero }}{% if f.en_retard %} · <span class="text-danger">en retard</span>{% endif %}</div></div></a>
           <div class="l-droite l-montant">{{ f.reste|fcfa }}</div></li>
-        {% else %}<li class="text-secondary small">Aucune facture en attente de paiement.</li>{% endfor %}
+        {% endfor %}
       </ul>
     </div>
   </div>
 
-  <!-- Rangée 2 : brouillons + activité -->
   <div class="col-lg-4">
-    <div class="titre-bloc"><h2>Commandes à vérifier</h2>{% if u.role in ('vendeur','responsable') %}<a href="/dossiers/nouveau"><i class="ti ti-plus"></i> Nouvelle</a>{% endif %}</div>
+    <div class="titre-bloc"><h2>Commandes</h2>{% if u.role in ('vendeur','responsable') %}<a href="/dossiers/nouveau"><i class="ti ti-plus"></i> Nouvelle</a>{% endif %}</div>
     <div class="carte">
       <div class="onglets" role="tablist">
         <button type="button" class="actif" data-filtre="tous">Toutes</button>
@@ -61,22 +53,18 @@
         <li data-etat="{{ 'bloque' if d.bloquantes else 'pret' }}">
           <span class="icone-carre {{ 'rouge' if d.bloquantes else 'accent' }}"><i class="ti {{ 'ti-alert-triangle' if d.bloquantes else 'ti-circle-check' }}"></i></span>
           <a class="ligne-lien" href="/dossiers/{{ d.id }}"><div class="l-corps"><div class="l-titre">{{ d.client_nom }}</div>
-            <div class="l-sous">{% if d.bloquantes %}{{ d.bloquantes[0].titre }}{% if d.bloquantes|length > 1 %} +{{ d.bloquantes|length - 1 }}{% endif %}{% else %}Prête à valider{% endif %}</div></div></a>
-          <div class="l-droite"><div class="l-montant">{{ d.totaux.total_ttc|fcfa if d.totaux else '—' }}</div><div class="l-sous">{{ d.cree_le|date_fr }}</div></div>
+            <div class="l-sous">{{ d.bloquantes[0].titre if d.bloquantes else 'Prête' }}</div></div></a>
+          <div class="l-droite"><div class="l-montant">{{ d.totaux.total_ttc|fcfa if d.totaux else '—' }}</div><div class="l-sous">{{ d.cree_le[11:16] }}</div></div>
         </li>
         {% else %}
-        <li class="vide d-block"><i class="ti ti-inbox"></i>Aucune commande en attente.</li>
+        <li class="vide d-block"><i class="ti ti-inbox"></i>Aucune commande</li>
         {% endfor %}
       </ul>
     </div>
   </div>
   <div class="col-lg-8">
-    <div class="titre-bloc"><h2>Activité</h2></div>
+    <div class="titre-bloc"><h2>Activité</h2><div class="legende"><span><i style="background:var(--accent)"></i>7 jours</span><span><i style="background:#e3e6e9"></i>Semaine précédente</span></div></div>
     <div class="carte">
-      <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
-        <strong>Facturé par jour (TTC)</strong>
-        <div class="legende"><span><i style="background:var(--accent)"></i>7 derniers jours</span><span><i style="background:#e3e6e9"></i>Semaine précédente</span></div>
-      </div>
       <div class="graph" role="img" aria-label="Montants facturés sur les 7 derniers jours">
         {% for s in tb.semaine %}
         <div class="jour">
@@ -89,7 +77,7 @@
         {% endfor %}
       </div>
     </div>
-    <div class="titre-bloc mt-4"><h2>Erreurs évitées cette semaine</h2><span class="lien">Contrôles déclenchés par e-FACIL</span></div>
+    <div class="titre-bloc mt-4"><h2>Erreurs évitées · 7 jours</h2></div>
     <div class="carte">
       {% if tb.controles %}
       <div class="tuiles">
@@ -100,18 +88,17 @@
         </div>
         {% endfor %}
       </div>
-      {% else %}<p class="vide mb-0"><i class="ti ti-shield-check"></i>Aucune anomalie détectée cette semaine.</p>{% endif %}
+      {% else %}<p class="vide mb-0"><i class="ti ti-shield-check"></i>Aucune</p>{% endif %}
     </div>
   </div>
 
-  <!-- Rangée 3 : dernières factures -->
   <div class="col-12">
-    <div class="titre-bloc"><h2>Dernières factures</h2><a href="/factures">Toutes les factures <i class="ti ti-chevron-right"></i></a></div>
+    <div class="titre-bloc"><h2>Dernières factures</h2><a href="/factures">Voir <i class="ti ti-chevron-right"></i></a></div>
     <div class="carte">
       {% if factures %}
       <div class="table-responsive">
       <table class="tableau table-empile">
-        <thead><tr><th>Document</th><th>Client</th><th>Date</th><th>État</th><th class="num">Montant TTC</th></tr></thead>
+        <thead><tr><th>Document</th><th>Client</th><th>Date</th><th>État</th><th class="num">TTC</th></tr></thead>
         <tbody>
         {% for f in factures %}
         <tr>
@@ -119,13 +106,13 @@
           <td data-label="Client">{{ f.contenu.client.nom }}</td>
           <td data-label="Date" class="text-secondary">{{ f.valide_le|date_fr }}</td>
           <td data-label="État"><span class="etat etat-{{ f.statut }}">{{ STATUTS[f.statut] }}</span></td>
-          <td data-label="Montant TTC" class="num fw-bold">{% if f.type == 'FA' %}−{% endif %}{{ f.total_ttc|fcfa }}</td>
+          <td data-label="TTC" class="num fw-bold">{% if f.type == 'FA' %}−{% endif %}{{ f.total_ttc|fcfa }}</td>
         </tr>
         {% endfor %}
         </tbody>
       </table>
       </div>
-      {% else %}<p class="vide mb-0"><i class="ti ti-file-invoice"></i>Aucune facture pour l'instant. Commencez par coller une commande.</p>{% endif %}
+      {% else %}<p class="vide mb-0"><i class="ti ti-file-invoice"></i>Aucune facture</p>{% endif %}
     </div>
   </div>
 </div>

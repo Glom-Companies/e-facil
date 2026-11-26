@@ -50,20 +50,20 @@
         <span class="date"><i class="ti ti-chevrons-right" aria-hidden="true"></i>{{ aujourdhui }}</span>
       </div>
       <div class="entete-droite">
+        <span class="bandeau-simulation p-0"><span class="pastille" title="Données fictives, émission DGI simulée, aucune valeur fiscale">Simulation</span></span>
         <a class="cloche" href="/dossiers" aria-label="{{ nb_a_traiter }} dossier(s) à traiter"><i class="ti ti-bell"></i>{% if nb_a_traiter %}<span class="point">{{ nb_a_traiter }}</span>{% endif %}</a>
         <form class="recherche" method="get" action="/recherche" role="search">
-          <input name="q" value="{{ request.query_params.get('q', '') }}" placeholder="Client, n° de facture, code DGI…" aria-label="Rechercher">
+          <input name="q" value="{{ request.query_params.get('q', '') }}" placeholder="Rechercher…" aria-label="Rechercher un client, une facture ou un code DGI">
           <i class="ti ti-search" aria-hidden="true"></i>
         </form>
       </div>
     </header>
-    <div class="bandeau-simulation"><span class="pastille">Simulation</span> Données fictives · émission DGI simulée · aucune valeur fiscale</div>
     <main class="contenu">
       {% if flash %}<div class="alert alert-success" role="status"><i class="ti ti-circle-check"></i> {{ flash }}</div>{% endif %}
       {% if erreur %}<div class="alert alert-danger" role="alert"><i class="ti ti-alert-triangle"></i> {{ erreur }}</div>{% endif %}
       {% block contenu %}{% endblock %}
     </main>
-    <footer class="pied">e-FACIL par l'équipe BillGenius · prototype BWAI'2026, cas 2</footer>
+    <footer class="pied">e-FACIL · BillGenius</footer>
   </div>
 </div>
 {% else %}

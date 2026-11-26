@@ -231,3 +231,7 @@ a{color:var(--accent)}
   .table-revue td.c-article{min-width:0!important}
   .entete-page h1{font-size:1.25rem}
 }
+.connexion-marque{align-items:flex-start}
+.connexion-marque .logo-grand{font-size:3.2rem;padding:0;margin:auto 0}
+.connexion-marque p{color:var(--nuit-texte)}
+@media (max-width:991px){.connexion-marque{min-height:auto;gap:1rem}.connexion-marque .logo-grand{font-size:2.2rem;margin:0}}

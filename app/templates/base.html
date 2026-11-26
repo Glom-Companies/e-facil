@@ -23,10 +23,7 @@
     <nav class="nav-lat">
       <a class="nav-lien {% if p == '/' %}actif{% endif %}" href="/">{{ icone('tableau') }}<span>Tableau de bord</span></a>
 
-      <details class="nav-groupe" {% if p.startswith('/dossiers') or p.startswith('/factures') or p.startswith('/referentiels') or p.startswith('/simulateur') %}open{% endif %}>
-        <summary class="nav-lien {% if p.startswith('/dossiers') or p.startswith('/factures') or p.startswith('/referentiels') or p.startswith('/simulateur') %}groupe-actif{% endif %}">
-          {{ icone('facture') }}<span>Facturation</span>{{ icone('bas', 16) }}</summary>
-        <div class="nav-sous">
+      {% set liens_facturation %}
           {% if u.role in ('vendeur', 'responsable') %}
           <a class="{% if p == '/dossiers/nouveau' %}actif{% endif %}" href="/dossiers/nouveau">Nouvelle commande</a>
           {% endif %}
@@ -36,13 +33,18 @@
           {% if u.role in ('admin', 'responsable') %}
           <a class="{% if p.startswith('/simulateur') %}actif{% endif %}" href="/simulateur">WhatsApp (simulé)</a>
           {% endif %}
+      {% endset %}
+      {% if liens_facturation|trim %}
+      <details class="nav-groupe" {% if p.startswith('/dossiers') or p.startswith('/factures') or p.startswith('/referentiels') or p.startswith('/simulateur') %}open{% endif %}>
+        <summary class="nav-lien {% if p.startswith('/dossiers') or p.startswith('/factures') or p.startswith('/referentiels') or p.startswith('/simulateur') %}groupe-actif{% endif %}">
+          {{ icone('facture') }}<span>Facturation</span>{{ icone('bas', 16) }}</summary>
+        <div class="nav-sous">
+{{ liens_facturation }}
         </div>
       </details>
+      {% endif %}
 
-      <details class="nav-groupe" {% if p.startswith('/comptabilite') or p.startswith('/journal') or p.startswith('/parametres') %}open{% endif %}>
-        <summary class="nav-lien {% if p.startswith('/comptabilite') or p.startswith('/journal') or p.startswith('/parametres') %}groupe-actif{% endif %}">
-          {{ icone('gestion') }}<span>Gestion</span>{{ icone('bas', 16) }}</summary>
-        <div class="nav-sous">
+      {% set liens_gestion %}
           {% if u.role in ('comptable', 'responsable', 'admin') %}
           <a class="{% if p.startswith('/comptabilite') %}actif{% endif %}" href="/comptabilite">Comptabilité</a>
           {% endif %}
@@ -52,8 +54,16 @@
           {% if u.role == 'admin' %}
           <a class="{% if p.startswith('/parametres') %}actif{% endif %}" href="/parametres">Paramètres</a>
           {% endif %}
+      {% endset %}
+      {% if liens_gestion|trim %}
+      <details class="nav-groupe" {% if p.startswith('/comptabilite') or p.startswith('/journal') or p.startswith('/parametres') %}open{% endif %}>
+        <summary class="nav-lien {% if p.startswith('/comptabilite') or p.startswith('/journal') or p.startswith('/parametres') %}groupe-actif{% endif %}">
+          {{ icone('gestion') }}<span>Gestion</span>{{ icone('bas', 16) }}</summary>
+        <div class="nav-sous">
+{{ liens_gestion }}
         </div>
       </details>
+      {% endif %}
     </nav>
     <div class="lateral-bas">
       <p class="mention-simu">{{ icone('alerte', 16) }}<span>Prototype : données fictives, émission DGI simulée. Aucune valeur fiscale.</span></p>
@@ -86,6 +96,20 @@
     <footer class="pied"><strong>e-FACIL</strong> par l'équipe BillGenius · prototype BWAI'2026, cas 2 · Les factures produites n'ont aucune valeur fiscale.</footer>
   </div>
 </div>
+{% if simulateur_ok and p != '/simulateur' %}
+<button type="button" class="tel-lanceur" id="tel-lanceur" aria-controls="tel-flottant" aria-expanded="false">
+  {{ icone('bulle', 22) }}<span>WhatsApp</span>
+</button>
+<section class="tel-flottant" id="tel-flottant" role="dialog" aria-label="Téléphone WhatsApp simulé" hidden>
+  <header class="tel-poignee" id="tel-poignee" title="Glisser pour déplacer">
+    <span class="tel-grip" aria-hidden="true"></span><span>WhatsApp (simulé)</span>
+    <a class="tel-agrandir" href="/simulateur" title="Ouvrir la page du simulateur" aria-label="Ouvrir la page du simulateur">⤢</a>
+    <button type="button" class="tel-fermer" id="tel-fermer" aria-label="Fermer le téléphone">×</button>
+  </header>
+  <iframe id="tel-cadre" title="Téléphone WhatsApp simulé" data-src="/simulateur?flottant=1"></iframe>
+</section>
+<script src="/static/flottant.js?v={{ version_css() }}" defer></script>
+{% endif %}
 {% else %}
 {% block public %}
 <div class="bandeau-simulation">Prototype de démonstration · données fictives · émission DGI simulée</div>
@@ -97,6 +121,7 @@
 <footer class="pied"><strong>e-FACIL</strong> par l'équipe BillGenius · prototype BWAI'2026, cas 2 · Les factures produites n'ont aucune valeur fiscale.</footer>
 {% endblock %}
 {% endif %}
+<script src="/static/tableaux.js?v={{ version_css() }}" defer></script>
 {% block scripts %}{% endblock %}
 </body>
 </html>

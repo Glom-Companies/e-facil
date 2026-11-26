@@ -175,7 +175,8 @@ def page(request: Request, nom: str, c, u, **ctx):
         else:
             n = c.execute("SELECT COUNT(*) FROM dossiers WHERE statut = 'BROUILLON'")
         ctx.setdefault("nb_brouillons", n.fetchone()[0])
-    ctx.update(ROLES=S.libelles_roles(c), restreint=S.restreint(u))
+    ctx.update(ROLES=S.libelles_roles(c), restreint=S.restreint(u),
+               simulateur_ok=bool(u) and SIMULATEUR_ACTIF and u["role"] in ROLES_SIMULATEUR)
     ctx.update(request=request, u=u, csrf=jeton_csrf(request), entreprise=S.entreprise(c),
                flash=request.session.pop("flash", None), erreur=request.session.pop("erreur", None),
                idem=str(uuid.uuid4()))
@@ -502,13 +503,13 @@ def _simulateur_autorise(u) -> None:
 
 
 @app.get("/simulateur", response_class=HTMLResponse)
-async def simulateur(request: Request):
+async def simulateur(request: Request, flottant: int = 0):
     async def vue(request, c, u):
         _simulateur_autorise(u)
         cfg = canaux.config(c).get("whatsapp", {})
         return page(request, "simulateur.html", c, u, habilites=canaux.habilites(c),
                     numero_entreprise=cfg.get("numero_entreprise", ""), numero_inconnu="+229 01 99 99 99 99",
-                    aide_bot=canaux.AIDE)
+                    aide_bot=canaux.AIDE, flottant=bool(flottant))
     return await avec_utilisateur(vue)(request)
 
 

@@ -128,7 +128,7 @@
       <form method="post" action="/factures/{{ f.id }}/avoir" class="card-body">
         <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="idem" value="{{ idem }}">
         <p class="small text-secondary">Indiquez les quantités à créditer (retour, produit abîmé, erreur). Pour annuler toute la facture, reprenez toutes les quantités.</p>
-        <div class="table-responsive"><table class="table table-sm">
+        <div class="table-responsive"><table class="table table-sm" data-tableau="non">
           {% for l in t.lignes %}
           <tr><td>{{ l.designation }}</td><td class="text-secondary small">facturé : {{ l.quantite|replace('.', ',') }}</td>
             <td style="width:7rem"><input class="form-control form-control-sm text-end" name="q:{{ loop.index0 }}" placeholder="0" inputmode="decimal" aria-label="Quantité à créditer"></td></tr>

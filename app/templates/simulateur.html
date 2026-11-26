@@ -1,14 +1,16 @@
-{% extends "base.html" %}
+{% extends "base_nu.html" if flottant else "base.html" %}
 {% from "_icones.html" import icone %}
 {% block titre %}WhatsApp (simulé){% endblock %}
 {% block titre_haut %}WhatsApp (simulé){% endblock %}
 {% block contenu %}
+{% if not flottant %}
 <div class="entete-page">
   <div>
     <h1>Commandes par WhatsApp</h1>
     <p class="sous">Numéro de l'entreprise : <span class="mono">{{ numero_entreprise }}</span> · seuls les numéros habilités sont traités.</p>
   </div>
 </div>
+{% endif %}
 
 <div class="grille-simu">
   <div class="colonne-telephone">
@@ -38,7 +40,7 @@
     </div>
     <p class="etat-micro text-center" id="etat" role="status"></p>
   </div>
-
+  {% if not flottant %}
   <div>
     <div class="card">
       <div class="card-header"><h2 class="card-title">Ce que le bot comprend</h2></div>
@@ -60,6 +62,7 @@
       {% if u.role == 'admin' %}<div class="card-body pt-2"><a href="/parametres#canaux">Gérer les numéros</a></div>{% endif %}
     </div>
   </div>
+  {% endif %}
 </div>
 {% endblock %}
 {% block scripts %}
@@ -86,7 +89,9 @@
     } else if (m.texte) { const p = document.createElement('p'); p.textContent = m.texte; b.appendChild(p); }
     if (m.sens === 'sortant' && m.dossier_id && m.type !== 'document') {
       const a = document.createElement('a'); a.className = 'wa-lien'; a.href = m.facture_id ? '/factures/' + m.facture_id : '/dossiers/' + m.dossier_id;
-      a.textContent = m.facture_id ? 'Voir la facture dans e-FACIL' : 'Ouvrir le dossier n° ' + m.dossier_id; b.appendChild(a);
+      a.textContent = m.facture_id ? 'Voir la facture dans e-FACIL' : 'Ouvrir le dossier n° ' + m.dossier_id;
+      if (window.top !== window) a.target = '_top';
+      b.appendChild(a);
     }
     const h = document.createElement('time'); h.textContent = (m.horodatage || '').slice(11, 16); b.appendChild(h);
     return b;
@@ -142,7 +147,8 @@
     };
     enreg.start(); action.classList.add('actif'); etat.textContent = 'Enregistrement… touchez à nouveau pour envoyer.';
   });
-  choix.addEventListener('change', () => { dernier = ''; charger(); });
+  try { const n = localStorage.getItem('efacil-simu-numero'); if (n && [...choix.options].some(o => o.value === n)) choix.value = n; } catch (e) {}
+  choix.addEventListener('change', () => { try { localStorage.setItem('efacil-simu-numero', choix.value); } catch (e) {} dernier = ''; charger(); });
   charger(); setInterval(() => { if (!occupe) charger(); }, 2500);
 })();
 </script>

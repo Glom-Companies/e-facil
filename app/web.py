@@ -169,7 +169,12 @@ def verifier_csrf(request: Request, jeton: str) -> None:
 
 def page(request: Request, nom: str, c, u, **ctx):
     if u:
-        ctx.setdefault("nb_brouillons", c.execute("SELECT COUNT(*) FROM dossiers WHERE statut = 'BROUILLON'").fetchone()[0])
+        if S.restreint(u):
+            n = c.execute("SELECT COUNT(*) FROM dossiers WHERE statut = 'BROUILLON' AND cree_par = ?", (u["id"],))
+        else:
+            n = c.execute("SELECT COUNT(*) FROM dossiers WHERE statut = 'BROUILLON'")
+        ctx.setdefault("nb_brouillons", n.fetchone()[0])
+    ctx.update(ROLES=S.libelles_roles(c), restreint=S.restreint(u))
     ctx.update(request=request, u=u, csrf=jeton_csrf(request), entreprise=S.entreprise(c),
                flash=request.session.pop("flash", None), erreur=request.session.pop("erreur", None),
                idem=str(uuid.uuid4()))
@@ -311,13 +316,17 @@ def avec_utilisateur(fonction):
 @app.get("/", response_class=HTMLResponse)
 async def accueil(request: Request):
     async def vue(request, c, u):
-        brouillons = lister_dossiers(c, "BROUILLON", 30)
+        brouillons = lister_dossiers(c, "BROUILLON", 30, u)
+        visibles = S.dossiers_visibles(c, u)
         factures = [dict(r, contenu=json.loads(r["contenu"])) for r in
-                    c.execute("SELECT * FROM factures ORDER BY id DESC LIMIT 12")]
+                    c.execute("SELECT * FROM factures ORDER BY id DESC LIMIT 200")]
+        factures = [f for f in factures if S.facture_visible(f, visibles, _origines(c))][:12]
         stats = {
             "brouillons": len(brouillons),
             "a_valider": sum(1 for d in brouillons if d["bloquantes"] == 0),
-            "confirmees": c.execute("SELECT COUNT(*) FROM factures WHERE statut='CONFIRMEE' AND type='FV'").fetchone()[0],
+            "confirmees": sum(1 for f in factures if f["statut"] == "CONFIRMEE" and f["type"] == "FV")
+            if visibles is not None else
+            c.execute("SELECT COUNT(*) FROM factures WHERE statut='CONFIRMEE' AND type='FV'").fetchone()[0],
             "ca": c.execute("SELECT COALESCE(SUM(CASE type WHEN 'FV' THEN total_ttc ELSE -total_ttc END),0) "
                             "FROM factures WHERE statut='CONFIRMEE'").fetchone()[0],
         }
@@ -326,12 +335,22 @@ async def accueil(request: Request):
     return await avec_utilisateur(vue)(request)
 
 
-def lister_dossiers(c, etat: str | None, limite: int = 200) -> list[dict]:
-    """Dossiers de vente, du plus récent au plus ancien, avec le client et le nombre de blocages."""
+def _origines(c) -> dict[int, int]:
+    """Facture de vente -> dossier, pour rattacher un avoir au dossier de sa facture d'origine."""
+    return {r["id"]: r["dossier_id"] for r in c.execute("SELECT id, dossier_id FROM factures WHERE type = 'FV'")}
+
+
+def lister_dossiers(c, etat: str | None, limite: int = 200, u: dict | None = None) -> list[dict]:
+    """Dossiers de vente, du plus récent au plus ancien, avec le client et le nombre de blocages.
+    Un vendeur d'une équipe ne voit que les siens."""
+    filtre, params = ("", ())
+    if S.restreint(u):
+        filtre, params = (" AND cree_par = ?", (u["id"],))
     if etat:
-        lignes = c.execute("SELECT id FROM dossiers WHERE statut = ? ORDER BY id DESC LIMIT ?", (etat, limite))
+        lignes = c.execute(f"SELECT id FROM dossiers WHERE statut = ?{filtre} ORDER BY id DESC LIMIT ?",
+                           (etat, *params, limite))
     else:
-        lignes = c.execute("SELECT id FROM dossiers ORDER BY id DESC LIMIT ?", (limite,))
+        lignes = c.execute(f"SELECT id FROM dossiers WHERE 1 = 1{filtre} ORDER BY id DESC LIMIT ?", (*params, limite))
     res = []
     for r in lignes.fetchall():
         d = S.dossier(c, r["id"])
@@ -345,7 +364,13 @@ def lister_dossiers(c, etat: str | None, limite: int = 200) -> list[dict]:
 @app.get("/recherche", response_class=HTMLResponse)
 async def recherche(request: Request, q: str = ""):
     async def vue(request, c, u):
-        return page(request, "recherche.html", c, u, q=q, res=S.rechercher(c, q))
+        res = S.rechercher(c, q)
+        visibles = S.dossiers_visibles(c, u)
+        if visibles is not None:
+            origines = _origines(c)
+            res = {"dossiers": [d for d in res["dossiers"] if d["id"] in visibles],
+                   "factures": [f for f in res["factures"] if S.facture_visible(f, visibles, origines)]}
+        return page(request, "recherche.html", c, u, q=q, res=res)
     return await avec_utilisateur(vue)(request)
 
 
@@ -363,9 +388,14 @@ ETATS_DOSSIER = {"BROUILLON": "À vérifier", "VALIDE": "Validés", "SUPPRIME": 
 async def liste_dossiers(request: Request, etat: str = "BROUILLON"):
     async def vue(request, c, u):
         choisi = etat if etat in ETATS_DOSSIER else "BROUILLON"
-        comptes = {k: n for k, n in c.execute("SELECT statut, COUNT(*) FROM dossiers GROUP BY statut")}
+        if S.restreint(u):
+            comptes = {k: n for k, n in c.execute("SELECT statut, COUNT(*) FROM dossiers WHERE cree_par = ? "
+                                                  "GROUP BY statut", (u["id"],))}
+        else:
+            comptes = {k: n for k, n in c.execute("SELECT statut, COUNT(*) FROM dossiers GROUP BY statut")}
         comptes["tous"] = sum(comptes.values())
-        return page(request, "dossiers.html", c, u, dossiers=lister_dossiers(c, None if choisi == "tous" else choisi),
+        return page(request, "dossiers.html", c, u, dossiers=lister_dossiers(c, None if choisi == "tous" else choisi,
+                                                                             200, u),
                     etat=choisi, etats=ETATS_DOSSIER, comptes=comptes)
     return await avec_utilisateur(vue)(request)
 
@@ -543,6 +573,7 @@ async def simulateur_media(request: Request, media_id: str):
 @app.get("/dossiers/{did}/piece")
 async def piece_jointe(request: Request, did: int):
     async def vue(request, c, u):
+        S.verifier_acces_dossier(c, u, did)
         S.dossier(c, did)  # dossier existant, utilisateur connecté
         p = S.piece(did)
         if not p:
@@ -558,6 +589,7 @@ async def piece_jointe(request: Request, did: int):
 @app.get("/dossiers/{did}", response_class=HTMLResponse)
 async def revue(request: Request, did: int):
     async def vue(request, c, u):
+        S.verifier_acces_dossier(c, u, did)
         d = S.dossier(c, did)
         br = d["brouillon"]
         cit_cmd, cit_bl = [], []
@@ -596,6 +628,7 @@ async def revue(request: Request, did: int):
 @app.post("/dossiers/{did}/corriger")
 async def corriger(request: Request, did: int):
     async def f(c, u, form):
+        S.verifier_acces_dossier(c, u, did)
         champs = {k: v for k, v in form.items() if k not in ("csrf", "version")}
         S.corriger(c, u, did, int(form["version"]), champs)
     return await action(request, f"/dossiers/{did}", f"/dossiers/{did}", f, "Modifications enregistrées.")
@@ -604,6 +637,7 @@ async def corriger(request: Request, did: int):
 @app.post("/dossiers/{did}/livraison")
 async def livraison(request: Request, did: int):
     async def f(c, u, form):
+        S.verifier_acces_dossier(c, u, did)
         if not form.get("texte_livraison", "").strip():
             raise S.Refus("Collez le texte du bon de livraison.")
         S.ajouter_livraison(c, u, did, int(form["version"]), form["texte_livraison"], form.get("extracteur", "regles"))
@@ -636,6 +670,7 @@ async def valider(request: Request, did: int):
 @app.post("/dossiers/{did}/supprimer")
 async def supprimer(request: Request, did: int):
     async def f(c, u, form):
+        S.verifier_acces_dossier(c, u, did)
         S.supprimer_dossier(c, u, did, int(form["version"]))
     return await action(request, "/", f"/dossiers/{did}", f, "Brouillon supprimé.")
 
@@ -643,6 +678,7 @@ async def supprimer(request: Request, did: int):
 @app.post("/dossiers/{did}/proforma")
 async def proforma(request: Request, did: int):
     async def f(c, u, form):
+        S.verifier_acces_dossier(c, u, did)
         return S.creer_proforma(c, u, did)
     return await action(request, lambda pid: f"/proformas/{pid}/pdf", f"/dossiers/{did}", f)
 
@@ -653,6 +689,7 @@ async def proforma_pdf(request: Request, pid: int):
         r = c.execute("SELECT * FROM proformas WHERE id = ?", (pid,)).fetchone()
         if not r:
             raise S.Refus("Pro forma introuvable.")
+        S.verifier_acces_dossier(c, u, r["dossier_id"])
         return Response(generer(json.loads(r["contenu"])), media_type="application/pdf",
                         headers={"Content-Disposition": f'inline; filename="{r["numero"]}.pdf"'})
     return await avec_utilisateur(vue)(request)
@@ -664,6 +701,8 @@ async def proforma_pdf(request: Request, pid: int):
 async def factures(request: Request):
     async def vue(request, c, u):
         liste = [dict(r, contenu=json.loads(r["contenu"])) for r in c.execute("SELECT * FROM factures ORDER BY id DESC")]
+        visibles, origines = S.dossiers_visibles(c, u), _origines(c)
+        liste = [f for f in liste if S.facture_visible(f, visibles, origines)]
         return page(request, "factures.html", c, u, factures=liste)
     return await avec_utilisateur(vue)(request)
 
@@ -671,6 +710,7 @@ async def factures(request: Request):
 @app.get("/factures/{fid}", response_class=HTMLResponse)
 async def facture(request: Request, fid: int):
     async def vue(request, c, u):
+        S.verifier_acces_facture(c, u, fid)
         f = S.facture(c, fid)
         origine = S.facture(c, f["facture_origine_id"]) if f.get("facture_origine_id") else None
         cl = S.client(c, f["contenu"]["client"].get("id")) or {}
@@ -682,6 +722,7 @@ async def facture(request: Request, fid: int):
 @app.get("/factures/{fid}/pdf")
 async def facture_pdf(request: Request, fid: int, copie: int = 0):
     async def vue(request, c, u):
+        S.verifier_acces_facture(c, u, fid)
         f = S.facture(c, fid)
         pdf = generer(f["contenu"], f if f["code_dgi"] else None, copie=bool(copie))
         if copie:
@@ -719,6 +760,7 @@ async def avoir(request: Request, fid: int):
 @app.post("/factures/{fid}/envoyer")
 async def envoyer(request: Request, fid: int):
     async def f(c, u, form):
+        S.verifier_acces_facture(c, u, fid)
         S.envoyer_facture(c, u, fid, form.get("canal", ""), form.get("destinataire", ""))
     return await action(request, f"/factures/{fid}", f"/factures/{fid}", f, "Facture envoyée au client (simulé).")
 
@@ -726,6 +768,7 @@ async def envoyer(request: Request, fid: int):
 @app.post("/factures/{fid}/rectifier")
 async def rectifier(request: Request, fid: int):
     async def f(c, u, form):
+        S.verifier_acces_facture(c, u, fid)
         return S.creer_rectificative(c, u, fid)
     return await action(request, lambda did: f"/dossiers/{did}", f"/factures/{fid}", f,
                         "Brouillon de la facture rectificative : corrigez-le, puis validez.")
@@ -734,6 +777,7 @@ async def rectifier(request: Request, fid: int):
 @app.post("/factures/{fid}/accuse")
 async def accuse(request: Request, fid: int):
     async def f(c, u, form):
+        S.verifier_acces_facture(c, u, fid)
         S.accuser_reception(c, u, fid, form.get("canal", "WHATSAPP"))
     return await action(request, f"/factures/{fid}", f"/factures/{fid}", f, "Accusé de réception enregistré (simulé).")
 
@@ -804,6 +848,7 @@ ACTIONS_JOURNAL = {
     "REMISE_ACCORDEE": ("a accordé une remise", "ventes", "coche"),
     "ARTICLE_CREE": ("a ajouté un article", "administration", "gestion"),
     "CLIENT_CREE": ("a ajouté un client", "administration", "gestion"),
+    "ROLES_RENOMMES": ("a renommé les rôles", "administration", "gestion"),
     "UTILISATEUR_CREE": ("a créé un compte", "administration", "gestion"),
     "CANAUX_MODIFIES": ("a modifié les canaux de messagerie", "administration", "gestion"),
     "NUMERO_HABILITE": ("a habilité un numéro de téléphone", "administration", "gestion"),
@@ -833,6 +878,7 @@ def _jour_long(iso: str) -> str:
 @app.get("/journal", response_class=HTMLResponse)
 async def journal(request: Request, verifier: int = 0, categorie: str = "", acteur: str = ""):
     async def vue(request, c, u):
+        S.exiger(u, "journal.lire")
         noms = {r["id"]: r["nom"] for r in c.execute("SELECT id, nom FROM utilisateurs")}
         numeros = {str(r["id"]): r["numero"] for r in c.execute("SELECT id, numero FROM factures")}
         lignes = []
@@ -984,6 +1030,20 @@ async def parametres_utilisateur(request: Request):
         S.creer_utilisateur(c, u, form.get("nom", ""), form.get("login", ""), form.get("role", ""),
                             form.get("mot_de_passe", ""))
     return await action(request, "/parametres#canaux", "/parametres#canaux", f, "Compte créé.")
+
+
+@app.post("/parametres/roles")
+async def parametres_roles(request: Request):
+    async def f(c, u, form):
+        S.exiger(u, "parametres.ecrire")
+        libelles = {}
+        for role, defaut in S.LIBELLES_ROLES_DEFAUT.items():
+            v = re.sub(r"\s+", " ", str(form.get(role, "")).strip())[:30]
+            libelles[role] = v if len(v) >= 2 else defaut
+        with transaction(c):
+            ecrire_parametre(c, "libelles_roles", libelles)
+            journaliser(c, u["id"], "ROLES_RENOMMES", "entreprise", libelles)
+    return await action(request, "/parametres#canaux", "/parametres#canaux", f, "Noms des rôles enregistrés.")
 
 
 @app.post("/parametres/numeros")

@@ -43,7 +43,56 @@ DROITS = {
     "parametres.ecrire": {"admin"},
     "demo.reinitialiser": {"admin"},
     "compta.lire": {"comptable", "responsable", "admin"},
+    "journal.lire": {"responsable", "comptable", "admin"},
 }
+
+
+# --- Cloisonnement : une vendeuse ne voit que ses propres dossiers et leurs factures ------------
+
+def restreint(u: dict | None) -> bool:
+    """Vrai pour un vendeur d'une équipe (hors mode solo) : il ne voit que ce qu'il a préparé."""
+    return bool(u) and u.get("role") == "vendeur" and not u.get("mode_solo")
+
+
+def verifier_acces_dossier(conn, u: dict, did: int) -> None:
+    if restreint(u):
+        r = conn.execute("SELECT cree_par FROM dossiers WHERE id = ?", (did,)).fetchone()
+        if not r or r["cree_par"] != u["id"]:
+            raise Refus("Ce dossier est suivi par une autre personne de l'équipe.")
+
+
+def verifier_acces_facture(conn, u: dict, fid: int) -> None:
+    if restreint(u):
+        r = conn.execute("SELECT dossier_id, facture_origine_id FROM factures WHERE id = ?", (fid,)).fetchone()
+        if r and r["facture_origine_id"]:
+            r = conn.execute("SELECT dossier_id, facture_origine_id FROM factures WHERE id = ?",
+                             (r["facture_origine_id"],)).fetchone()
+        if not r or not r["dossier_id"]:
+            raise Refus("Cette facture est suivie par une autre personne de l'équipe.")
+        verifier_acces_dossier(conn, u, r["dossier_id"])
+
+
+def dossiers_visibles(conn, u: dict) -> set[int] | None:
+    """Identifiants des dossiers visibles ; None = tous."""
+    if not restreint(u):
+        return None
+    return {r["id"] for r in conn.execute("SELECT id FROM dossiers WHERE cree_par = ?", (u["id"],))}
+
+
+def facture_visible(f: dict, visibles: set[int] | None, origines: dict[int, int] | None = None) -> bool:
+    if visibles is None:
+        return True
+    did = f.get("dossier_id") or (origines or {}).get(f.get("facture_origine_id"))
+    return did in visibles
+
+
+LIBELLES_ROLES_DEFAUT = {"vendeur": "Vendeur", "responsable": "Responsable", "comptable": "Comptable",
+                         "admin": "Administrateur"}
+
+
+def libelles_roles(conn) -> dict:
+    """Nom des rôles propre à l'entreprise (« Commercial », « Gérant »…) ; les droits ne changent pas."""
+    return {**LIBELLES_ROLES_DEFAUT, **(lire_parametre(conn, "libelles_roles", {}) or {})}
 
 PERSONNALISATION_DEFAUT = {
     "couleur": "#0B6E4F",

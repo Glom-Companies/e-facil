@@ -235,12 +235,14 @@ def _executer(conn, plateforme, numero, u, type_msg, texte, contenu) -> None:
             return
         m = re.fullmatch(r"(?i)(valider|ok|annuler|envoyer)\s*n?°?\s*(\d+)", commande)
         if m:
+            S.verifier_acces_dossier(conn, u, int(m.group(2)))
             {"valider": _valider, "ok": _valider, "annuler": _annuler, "envoyer": _envoyer}[m.group(1).lower()](
                 conn, plateforme, numero, u, int(m.group(2)))
             return
         m = re.fullmatch(r"(?is)(?:bl|livraison)\s*n?°?\s*(\d+)\s*[:\-]?\s*(.+)", commande)
         if m:
             did = int(m.group(1))
+            S.verifier_acces_dossier(conn, u, did)
             d = S.dossier(conn, did)
             S.ajouter_livraison(conn, u, did, d["version"], m.group(2).strip(), S.extracteur_auto(False))
             _annoncer(conn, plateforme, numero, did, "Livraison rattachée au dossier")

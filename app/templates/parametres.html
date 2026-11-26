@@ -46,6 +46,15 @@
       </div>
     </div>
     <div class="card mt-3">
+      <div class="card-header"><h2 class="card-title">{{ icone('bouclier', 18) }} Confidentialité des données</h2></div>
+      <div class="card-body small">
+        <p class="mb-2"><strong>Données de l'entreprise.</strong> Elles restent dans l'espace de l'entreprise, isolé des autres. Ni l'éditeur ni un tiers n'y accèdent sans votre accord.</p>
+        <p class="mb-2"><strong>Administration fiscale.</strong> Seules les factures émises lui sont transmises, comme l'exige la facturation normalisée. Brouillons, pro forma, paiements, journal et tableaux de bord ne quittent pas votre espace.</p>
+        <p class="mb-2"><strong>Lecture automatique.</strong> Seul le texte du message ou du document est transmis au service de lecture, pour en extraire les champs. En exploitation : contrat sans réutilisation des données, ou modèle installé sur votre serveur.</p>
+        <p class="mb-0"><strong>Accès.</strong> Chaque personne ne voit que ce que son rôle permet ; chaque action est inscrite au journal d'audit, infalsifiable.</p>
+      </div>
+    </div>
+    <div class="card mt-3">
       <div class="card-header"><h2 class="card-title">Canaux de messagerie <span class="pastille-simu">simulés</span></h2></div>
       <form method="post" action="/parametres/canaux" class="card-body">
         <input type="hidden" name="csrf" value="{{ csrf }}">
@@ -96,6 +105,17 @@
       </tbody>
     </table>
   </div>
+  <form method="post" action="/parametres/roles" class="card-body border-bottom">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <p class="fw-bold mb-2">Noms des rôles dans votre entreprise</p>
+    <div class="row g-2">
+      {% for role in ('vendeur', 'responsable', 'comptable', 'admin') %}
+      <div class="col-sm-6 col-lg-3"><label class="form-label small text-secondary" for="role-{{ role }}">{{ {'vendeur': 'Prépare les ventes', 'responsable': 'Valide les factures', 'comptable': 'Suit les encaissements', 'admin': 'Administre l\'espace'}[role] }}</label>
+        <input class="form-control" id="role-{{ role }}" name="{{ role }}" value="{{ ROLES[role] }}" maxlength="30"></div>
+      {% endfor %}
+    </div>
+    <button class="btn btn-blanc mt-2" type="submit">Enregistrer</button>
+  </form>
   <div class="card-body row g-4">
     <form method="post" action="/parametres/numeros" class="col-lg-5">
       <input type="hidden" name="csrf" value="{{ csrf }}">

@@ -189,3 +189,21 @@ def test_inscription_espace_separe(client):
     r = client.post("/connexion", data={"csrf": csrf(page), "login": "afi", "mot_de_passe": "afi-motdepasse",
                                         "espace": slug})
     assert "Se déconnecter" in r.text and "Ets Houénou" in r.text
+
+
+def test_cloisonnement_des_roles(client):
+    connecter(client, "rodrigue")
+    page = client.get("/dossiers/nouveau").text
+    r = client.post("/dossiers/nouveau", data={"csrf": csrf(page), "canal": "SMS", "extracteur": "regles",
+                                                "texte_commande": "c Dossou. 3 cartons de savon"})
+    did = re.search(r"/dossiers/(\d+)/corriger", r.text).group(1)
+    connecter(client, "aicha")
+    assert "autre personne" in client.get(f"/dossiers/{did}").text  # dossier d'un autre : refusé
+    assert f"/dossiers/{did}" not in client.get("/dossiers?etat=tous").text
+    assert "Votre rôle ne permet pas" in client.get("/journal").text
+    assert "Chiffre facturé" not in client.get("/").text
+    connecter(client, "admin")
+    page = client.get("/parametres").text
+    client.post("/parametres/roles", data={"csrf": csrf(page), "vendeur": "Commercial", "responsable": "Gérant",
+                                           "comptable": "Comptable", "admin": "Administrateur"})
+    assert "Commercial" in client.get("/parametres").text

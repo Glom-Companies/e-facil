@@ -46,7 +46,9 @@
           {% if u.role in ('comptable', 'responsable', 'admin') %}
           <a class="{% if p.startswith('/comptabilite') %}actif{% endif %}" href="/comptabilite">Comptabilité</a>
           {% endif %}
+          {% if u.role in ('responsable', 'comptable', 'admin') %}
           <a class="{% if p.startswith('/journal') %}actif{% endif %}" href="/journal">Journal d'audit</a>
+          {% endif %}
           {% if u.role == 'admin' %}
           <a class="{% if p.startswith('/parametres') %}actif{% endif %}" href="/parametres">Paramètres</a>
           {% endif %}

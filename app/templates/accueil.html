@@ -19,12 +19,15 @@
     <span class="rond">{{ icone('facture-ok', 26) }}</span>
     <span><span class="lib">Factures confirmées</span><span class="val">{{ stats.confirmees }}</span></span>
   </a>
+  {% if not restreint %}
   <a class="carte-stat" href="/factures" title="Factures confirmées par la DGI simulée, taxes comprises, avoirs déduits">
     <span class="rond">{{ icone('argent', 26) }}</span>
     <span><span class="lib">Chiffre facturé TTC</span><span class="val">{{ stats.ca|fcfa }}</span></span>
   </a>
+  {% endif %}
 </div>
 {% set couleur_lecteur = {'gemini': 'var(--serie-1)', 'groq': 'var(--serie-2)', 'regles': 'var(--serie-3)', 'ollama': 'var(--serie-4)'} %}
+{% if not restreint %}
 <div class="row g-3 mb-3">
   <!-- Facturé par jour -->
   <div class="col-xl-7">
@@ -98,19 +101,19 @@
   </div>
 </div>
 
-<!-- Garde-fous de l'IA -->
+<!-- Contrôles automatiques -->
 <div class="card mb-3">
   <div class="card-header">
-    <div><h2 class="card-title">L'IA lit, le code vérifie, l'humain décide</h2><p class="small text-secondary mb-0">Ce que les garde-fous ont intercepté sur {{ st.ia.dossiers }} dossier(s)</p></div>
+    <div><h2 class="card-title">Contrôles automatiques</h2><p class="small text-secondary mb-0">{{ st.ia.dossiers }} dossier(s) analysé(s) · chaque facture reste validée par une personne habilitée</p></div>
   </div>
   <div class="card-body">
     <div class="row g-3 align-items-stretch">
-      <div class="col-6 col-lg-3"><div class="tuile-ia"><span class="val">{{ st.ia.valeurs_ecartees }}</span><span class="lib">valeur(s) écartée(s) : citation absente du message</span></div></div>
-      <div class="col-6 col-lg-3"><div class="tuile-ia"><span class="val">{{ st.ia.consignes_suspectes }}</span><span class="lib">message(s) avec une consigne suspecte, ignorée et signalée</span></div></div>
-      <div class="col-6 col-lg-3"><div class="tuile-ia"><span class="val">{{ st.ia.replis }}</span><span class="lib">repli(s) automatique(s) quand une IA était indisponible</span></div></div>
+      <div class="col-6 col-lg-3"><div class="tuile-ia"><span class="val">{{ st.ia.valeurs_ecartees }}</span><span class="lib">valeur(s) écartée(s), introuvable(s) dans le message</span></div></div>
+      <div class="col-6 col-lg-3"><div class="tuile-ia"><span class="val">{{ st.ia.consignes_suspectes }}</span><span class="lib">consigne(s) suspecte(s) neutralisée(s)</span></div></div>
+      <div class="col-6 col-lg-3"><div class="tuile-ia"><span class="val">{{ st.ia.replis }}</span><span class="lib">bascule(s) vers le service de lecture de secours</span></div></div>
       <div class="col-6 col-lg-3">
         <div class="tuile-ia">
-          <span class="lib mb-2">Messages lus par</span>
+          <span class="lib mb-2">Service de lecture</span>
           {% if st.lecteurs %}
           <div class="graph-segments fin" role="img" aria-label="Répartition des lectures">
             {% for nom, n in st.lecteurs %}<span class="seg" style="flex:{{ n }};background:{{ couleur_lecteur.get(nom, 'var(--serie-4)') }}" tabindex="0" data-tip="{{ EXTRACTEURS.get(nom, nom) }} · {{ n }}"></span>{% endfor %}
@@ -124,6 +127,8 @@
     </div>
   </div>
 </div>
+
+{% endif %}
 
 <div class="row g-3">
   <div class="col-lg-7">

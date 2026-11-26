@@ -74,11 +74,28 @@ Les seuils (15 %, 72 h), le taux de TVA et le mode d'arrondi sont paramétrables
 
 Protocole : un corpus de **60 messages fictifs** (20 de mise au point, 40 de test gelés avant la mesure ; empreinte SHA-256 publiée), comparé à une **méthode de référence sans IA** (règles et dictionnaire d'alias). Pour chaque configuration, on compte les champs justes, les valeurs inventées, les champs laissés vides à tort et les anomalies détectées, avec des intervalles de confiance de Wilson à 95 %. Les réglages n'ont été faits que sur le corpus de mise au point. Le détail figure dans la fiche IA (`docs/fiche_ia.md`) et dans `eval/resultats_test.md`.
 
-<!-- RESULTATS_TEST -->
+Résultats sur les **40 messages de test gelés** (393 champs, 30 anomalies attendues), sans aucun échec d'appel :
+
+| Configuration | Champs justes (IC 95 %) | Valeurs inventées | Vides à tort | Anomalies détectées |
+|---|---|---|---|---|
+| S0 · référence sans IA | 92 % (89 – 94 %) | 2 | 26 | 80 % |
+| S1 · Gemini seul | 99 % (98 – 100 %) | 0 | 1 | 97 % |
+| S2 · Gemini + vérification | 99 % (98 – 100 %) | 0 | 2 | 97 % |
+| S4 · Groq seul | 99 % (98 – 100 %) | 0 | 2 | 100 % |
+| S5 · Groq + vérification (application) | 99 % (98 – 100 %) | 0 | 3 | 100 % |
+
+Modèles mesurés : `gemini-3.5-flash-lite` et `openai/gpt-oss-120b`, sans modèle de secours.
 
 ## 6. Comparaison à la référence
 
-<!-- COMPARAISON -->
+- **Exactitude de la lecture** : 99 % de champs justes avec l'IA contre 92 % avec la méthode de référence, intervalles de confiance disjoints. Les oublis tombent de 26 à 2 ou 3 champs ; la référence rate surtout les prix cités et les quantités écrites librement.
+- **Aucune valeur inventée** par les configurations avec IA, contre 2 pour la référence.
+- **Détection des anomalies** : 97 à 100 % avec l'IA contre 80 % sans IA. L'objectif du cahier des charges (au moins 90 %) est atteint avec l'IA, pas sans.
+- **Calculs** : identiques dans toutes les configurations. Ils ne dépendent pas de l'IA et reproduisent les exemples officiels de la DGI.
+- **Coût de la vérification** : sur ce corpus, l'IA n'a rien inventé, la vérification n'a donc rien eu à écarter ; elle a rejeté une valeur juste. Elle a en revanche écarté, pendant les essais, une quantité livrée mal lue (8 au lieu de 10). Nous la gardons : une valeur juste à ressaisir coûte moins qu'une valeur fausse acceptée.
+- **Temps** : la lecture prend 8 à 15 s par message avec les IA gratuites (attentes de quota comprises) contre une saisie manuelle que nous n'avons pas chronométrée. Le gain de temps réel reste à mesurer en expérimentation (section 9).
+
+Les erreurs observées et les seuils de revue humaine sont détaillés dans la fiche IA.
 
 ## 7. Limites
 

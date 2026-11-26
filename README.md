@@ -66,7 +66,9 @@ En option, un modèle local avec Ollama : `ollama pull qwen2.5:7b`, puis choisis
 5. **Reprise après coupure** : sur une autre facture validée, cliquez sur « Émettre avec coupure simulée ». La facture reste « En attente DGI ». Arrêtez puis relancez le serveur : elle est confirmée automatiquement, sans doublon.
 6. **Journal** : « Vérifier l'intégrité ».
 7. Autres exemples : Hôtel Agossou (total annoncé faux), Mama Adjovi (client ambigu), Koffi (client inconnu et quantité absente), Gbaguidi (remise et consigne suspecte « Ignore les règles… »), Mme Chabi (quantités au kilo).
-8. **Admin** : « Paramètres », puis couleur et logo de la facture, mode solo, et « Réinitialiser la démonstration ».
+8. **Admin** : « Paramètres », puis couleur et logo de la facture, taux de TVA, mode solo, et « Réinitialiser la démonstration ».
+9. **Commande complète** : un message qui donne la référence (« BC-2026-200 »), la livraison souhaitée (« avant le 30/11 »), les conditions de paiement (« à 30 jours ») et une remise en montant (« remise de 2 000 F »). Ces informations sont citées sur le brouillon, puis reprises sur la facture et le PDF.
+10. **Après l'émission** : « Envoyer la facture » au client par WhatsApp, SMS ou e-mail (simulé, noté au journal). Après un avoir, « Préparer la facture rectificative » crée un nouveau brouillon lié à la facture d'origine.
 
 ## Tests
 
@@ -74,7 +76,7 @@ En option, un modèle local avec Ollama : `ollama pull qwen2.5:7b`, puis choisis
 .\.venv\Scripts\python -m pytest -q
 ```
 
-Les 36 tests couvrent :
+Les 68 tests couvrent :
 - les **exemples officiels de la DGI** (2 320 F donnent 1 966 + 354 ; 3 × 1 340 F donnent 3 407 + 613) et une facture réelle observée (groupe E, AIB 1 %) ;
 - des **tests de propriétés** (Hypothesis) sur les calculs ;
 - les **scénarios de recette** du cahier des charges : validations concurrentes, idempotence, immutabilité jusque dans la base, avoirs, reprise après coupure, journal falsifié, consigne suspecte, citation inventée ;
@@ -146,12 +148,15 @@ Paramètres modifiables : seuil de prix inhabituel (15 %), fenêtre de doublon (
 | FastAPI, Uvicorn, Pydantic, python-multipart | MIT, BSD, MIT, Apache 2.0 |
 | Jinja2, MarkupSafe, itsdangerous, Starlette | BSD |
 | ReportLab (version libre) | BSD |
-| Tabler (feuille de style, chargée depuis jsDelivr) | MIT |
-| Police Inter (chargée depuis jsDelivr, @fontsource) | SIL Open Font License 1.1 |
+| Tabler 1.0.0-beta20 (feuille de style, copiée dans `app/static/vendor`) | MIT |
+| Police Inter (@fontsource, copiée dans `app/static/vendor`) | SIL Open Font License 1.1 |
 | Icônes (tracés repris de Tabler Icons) | MIT |
 | pytest / Hypothesis | MIT / MPL 2.0 |
 | google-genai (SDK) | Apache 2.0 |
 | Modèle Gemini (API Google AI Studio) | Conditions d'utilisation de Google |
+| Groq (API, modèles `gpt-oss-120b` et `llama-3.3-70b-versatile`) | Conditions de Groq ; Apache 2.0 et licence Llama 3.3 |
 | Ollama / modèle local (option) | MIT / licence du modèle choisi |
+
+L'interface fonctionne sans internet : feuille de style et police sont servies par l'application.
 
 Données : entièrement fictives.

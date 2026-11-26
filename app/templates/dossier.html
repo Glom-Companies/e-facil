@@ -142,12 +142,16 @@
 
         {% if d.totaux %}
         <div class="doc-totaux">
+          {% if u.role != 'vendeur' %}{# la vendeuse voit le prix payé, sans groupe de taxe ni HT (CDC, Simplicité) #}
           {% for g, t in d.totaux.par_groupe.items() %}
           <div><span>{{ aide('groupe', 'Groupe ' ~ g) }}</span><span>{{ t.ttc|fcfa }}</span></div>
           {% endfor %}
           <div><span>Total HT</span><span>{{ d.totaux.total_ht|fcfa }}</span></div>
           <div><span>Dont {{ aide('TVA') }} {{ d.totaux.taux_tva or 18 }} %</span><span>{{ d.totaux.total_tva|fcfa }}</span></div>
           <div class="fort"><span>Total {{ aide('TTC') }}</span><span>{{ d.totaux.total_ttc|fcfa }}</span></div>
+          {% else %}
+          <div class="fort"><span>Prix payé par le client, taxes comprises</span><span>{{ d.totaux.total_ttc|fcfa }}</span></div>
+          {% endif %}
           {% if d.totaux.aib_taux %}
           <div><span>Retenue {{ aide('AIB') }} {{ d.totaux.aib_taux }} %</span><span>− {{ d.totaux.aib_montant|fcfa }}</span></div>
           <div class="fort net"><span>Le client vous paiera</span><span>{{ d.totaux.net_a_payer|fcfa }}</span></div>

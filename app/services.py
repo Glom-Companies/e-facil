@@ -1003,7 +1003,7 @@ def creer_proforma(conn, u: dict, did: int) -> int:
         return cur.lastrowid
 
 
-# --- Recherche (d'après Livingstone Othniel, branche dev_othniel_design) ----------------------
+# --- Recherche --------------------------------------------------------------------------------
 
 def rechercher(conn, q: str) -> dict:
     """Factures (numéro, client, code DGI) et dossiers (client, n° de dossier, texte du message)."""

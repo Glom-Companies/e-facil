@@ -6,7 +6,6 @@ Lecture par règles simples uniquement : aucun appel à l'IA, résultat identiqu
 Les factures sont réparties sur les derniers jours (dates fictives, relatives à aujourd'hui) pour
 que le tableau de bord montre une activité ; toutes les opérations passent par les services normaux
 (contrôles, validation, émission simulée, journal chaîné).
-D'après le jeu de démonstration de Livingstone Othniel (branche dev_othniel_design).
 """
 from __future__ import annotations
 

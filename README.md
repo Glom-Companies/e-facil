@@ -88,7 +88,7 @@ En option, un modèle local avec Ollama : `ollama pull qwen2.5:7b`, puis choisis
 |---|---|
 | Rapport (4 pages) | [`docs/rapport.pdf`](docs/rapport.pdf) · source [`docs/rapport.md`](docs/rapport.md) |
 | Fiche IA | [`docs/fiche_ia.pdf`](docs/fiche_ia.pdf) · source [`docs/fiche_ia.md`](docs/fiche_ia.md) |
-| Vidéo de démonstration (2 min 21 s, sous-titrée) | [`docs/video_demo_e-FACIL.mp4`](docs/video_demo_e-FACIL.mp4) · scénario [`docs/scenario_video.md`](docs/scenario_video.md) |
+| Vidéo de démonstration (2 min 21 s, sous-titrée) | [`docs/video_demo_e-FACIL.mp4`](docs/video_demo_e-FACIL.mp4) |
 | Mesure de l'IA sur le corpus test gelé | [`eval/resultats_test.md`](eval/resultats_test.md) |
 | Cahier des charges et TDR | [`docs/`](docs/) |
 

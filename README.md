@@ -82,6 +82,16 @@ En option, un modèle local avec Ollama : `ollama pull qwen2.5:7b`, puis choisis
 9. **Commande complète** : un message qui donne la référence (« BC-2026-200 »), la livraison souhaitée (« avant le 30/11 »), les conditions de paiement (« à 30 jours ») et une remise en montant (« remise de 2 000 F »). Ces informations sont citées sur le brouillon, puis reprises sur la facture et le PDF.
 10. **Après l'émission** : « Envoyer la facture » au client par WhatsApp, SMS ou e-mail (simulé, noté au journal). Après un avoir, « Préparer la facture rectificative » crée un nouveau brouillon lié à la facture d'origine.
 
+## Livrables
+
+| Livrable | Fichier |
+|---|---|
+| Rapport (4 pages) | [`docs/rapport.pdf`](docs/rapport.pdf) · source [`docs/rapport.md`](docs/rapport.md) |
+| Fiche IA | [`docs/fiche_ia.pdf`](docs/fiche_ia.pdf) · source [`docs/fiche_ia.md`](docs/fiche_ia.md) |
+| Vidéo de démonstration (2 min 21 s, sous-titrée) | [`docs/video_demo_e-FACIL.mp4`](docs/video_demo_e-FACIL.mp4) · scénario [`docs/scenario_video.md`](docs/scenario_video.md) |
+| Mesure de l'IA sur le corpus test gelé | [`eval/resultats_test.md`](eval/resultats_test.md) |
+| Cahier des charges et TDR | [`docs/`](docs/) |
+
 ## Tests
 
 ```powershell

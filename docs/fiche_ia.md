@@ -60,11 +60,37 @@ Intervalles de confiance de Wilson à 95 %.
 
 ### 5.2 Résultats de l'IA
 
-<!-- RESULTATS_IA -->
+Corpus **test gelé** (40 messages, 393 champs, 30 anomalies attendues ; empreinte SHA-256 `b5dc13d5…3d6eac`), mesure du 26/11/2026, un seul modèle par configuration, aucun échec d'appel. Détail complet : `eval/resultats_test.md`.
+
+| Configuration | Champs justes | IC 95 % | Valeurs inventées | Vides à tort | Anomalies détectées | Dossiers sans blocage reconnus |
+|---|---|---|---|---|---|---|
+| S0 · sans IA (référence) | 361/393 (92 %) | 89 – 94 % | 2 | 26 | 24/30 (80 %) | 9/11 |
+| S1 · Gemini seul | 391/393 (99 %) | 98 – 100 % | 0 | 1 | 29/30 (97 %) | 11/11 |
+| S2 · Gemini + vérification | 390/393 (99 %) | 98 – 100 % | 0 | 2 | 29/30 (97 %) | 11/11 |
+| S4 · Groq seul | 391/393 (99 %) | 98 – 100 % | 0 | 2 | 30/30 (100 %) | 10/11 |
+| S5 · Groq + vérification | 390/393 (99 %) | 98 – 100 % | 0 | 3 | 30/30 (100 %) | 10/11 |
+
+**Lecture.**
+- **L'IA apporte un gain net** : 99 % de champs justes contre 92 % sans IA, avec des intervalles de confiance disjoints. Les champs oubliés passent de 26 à 2 ou 3, les valeurs inventées de 2 à 0, les anomalies détectées de 80 % à 97–100 %.
+- **La vérification des citations n'a rien eu à écarter sur ce corpus** : l'IA seule n'y a inventé aucune valeur. Elle a en revanche rejeté une valeur juste (une citation non retrouvée mot pour mot). C'est son coût : environ 1 champ sur 400. Elle reste le garde-fou qui empêche qu'une valeur sans source soit acceptée (voir section 6).
+- La configuration de l'application est **S5** (Groq, puis Gemini en secours), et **S2** pour les photos et les PDF.
+- Sur le corpus de mise au point (20 messages), la vérification coûtait davantage : 97 % (S2) contre 100 % (S1) ; ces 6 valeurs justes écartées sont le prochain réglage à faire.
+- **Durée de lecture par message** : 0,02 s sans IA ; 7,8 s avec Gemini et 15 s avec Groq, attentes dues aux quotas gratuits comprises. Le temps gagné par la vendeuse n'a pas été mesuré (voir limites).
 
 ## 6. Erreurs observées
 
-<!-- ERREURS -->
+Sur le corpus de test :
+- **Sans IA (S0)** : prix cités non repris (15) ou mal lus (2 inventés), quantités non reprises (9), articles inconnus jamais signalés (0/3), deux totaux annoncés manqués.
+- **Gemini (S1, S2)** : une ligne d'article non reprise, ce qui a masqué la quantité manquante de cette ligne (anomalie détectée 2 fois sur 3).
+- **Groq (S4, S5)** : un client non reconnu (vraisemblablement à l'origine du blocage signalé sur une commande pourtant complète, 10/11) et un ou deux prix cités non repris.
+
+Pendant les essais de l'application (hors corpus) :
+- Groq a pris la destinataire du message pour le client (« Bjr Aïcha, c Dossou » → client « Aïcha ») : le contrôle « client introuvable » a bloqué le brouillon.
+- Gemini a créé une ligne « riz » en double à partir d'une question sur le prix (« Le riz c 17.500 non ? ») : le contrôle « quantité absente » a bloqué la validation.
+- Gemini a lu 8 cartons livrés au lieu de 10 : la citation ne correspondait pas, **la vérification a écarté la valeur**.
+- Les paliers gratuits ont refusé des appels (quota de 20 requêtes par jour sur un modèle Gemini, surcharges) : la lecture a basculé sur l'autre IA, puis sur les règles.
+
+Aucune de ces erreurs n'a produit de facture fausse : chacune a été bloquée par un contrôle ou par la validation humaine.
 
 ## 7. Seuils de revue humaine
 

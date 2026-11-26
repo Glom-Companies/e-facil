@@ -36,8 +36,10 @@
     <div class="card">
       <div class="card-header"><h2 class="card-title">Lecture des messages par l'IA</h2></div>
       <div class="card-body small">
-        {% if gemini %}<p class="text-success mb-1">Clé Gemini configurée.</p>{% else %}<p class="mb-1">Aucune clé Gemini : seule la lecture par règles simples est disponible. Ajoutez <span class="mono">GEMINI_API_KEY</span> dans le fichier <span class="mono">.env</span>.</p>{% endif %}
-        <p class="text-secondary mb-0">Seules des données fictives sont envoyées au service gratuit de Google.</p>
+        {% if gemini %}<p class="text-success mb-1">Clé Gemini configurée (texte, photo et PDF).</p>{% else %}<p class="mb-1">Aucune clé Gemini : ajoutez <span class="mono">GEMINI_API_KEY</span> dans le fichier <span class="mono">.env</span>.</p>{% endif %}
+        {% if groq %}<p class="text-success mb-1">Clé Groq configurée (texte seulement).</p>{% else %}<p class="mb-1">Aucune clé Groq : ajoutez <span class="mono">GROQ_API_KEY</span> dans le fichier <span class="mono">.env</span>.</p>{% endif %}
+        {% if not gemini and not groq %}<p class="mb-1">Sans clé, seule la lecture par règles simples est disponible.</p>{% endif %}
+        <p class="text-secondary mb-0">Si une IA échoue, l'autre prend le relais, puis les règles simples. Seules des données fictives sont envoyées aux services gratuits de Google et de Groq.</p>
       </div>
     </div>
     <div class="card mt-3">

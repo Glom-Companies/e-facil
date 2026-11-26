@@ -23,7 +23,7 @@ from pathlib import Path
 from . import brouillon as B
 from .db import (connecter, ecrire_parametre, initialiser_schema, journaliser, lire_parametre, maintenant,
                  prochain_numero, transaction)
-from .extraction import ErreurExtraction, extraire, normaliser_resultat
+from .extraction import EXTRACTEURS, LIT_LES_DOCUMENTS, ErreurExtraction, extraire, ia_disponibles, normaliser_resultat
 from .moteur import ErreurCalcul, Ligne, calculer, lire_quantite
 
 RACINE = Path(__file__).resolve().parent.parent
@@ -220,20 +220,18 @@ def creer_dossier(conn, u: dict, canal: str, texte_commande: str, texte_livraiso
     if not texte_commande and not octets:
         raise Refus("Collez le message de commande ou joignez un document.")
     cls, arts = clients(conn), articles(conn)
-    try:
-        brut = normaliser_resultat(extraire(extracteur, texte_commande, cls, arts, octets, mime))
-    except ErreurExtraction as e:
-        raise Refus(str(e))
+    demande = extracteur
+    brut, extracteur, repli = _lire(extracteur, texte_commande, cls, arts, octets, mime)
     if not texte_commande and brut.get("transcription"):
         texte_commande = brut["transcription"].strip()
     br = B.construire(brut, texte_commande, cls, arts, verifier=True)
     extraction_bl = None
     if texte_livraison and texte_livraison.strip():
-        try:
-            extraction_bl = normaliser_resultat(extraire(extracteur, texte_livraison, cls, arts))
-        except ErreurExtraction as e:
-            raise Refus(str(e))
+        extraction_bl, ext_bl, repli_bl = _lire(extracteur, texte_livraison, cls, arts)
+        repli = repli or repli_bl
         br = B.integrer_livraison(br, extraction_bl, texte_livraison, arts)
+    if repli:
+        br["repli_ia"] = repli
     with transaction(conn):
         cur = conn.execute(
             "INSERT INTO dossiers (canal, texte_commande, texte_livraison, piece_jointe, cree_par, cree_le, extracteur,"
@@ -242,10 +240,44 @@ def creer_dossier(conn, u: dict, canal: str, texte_commande: str, texte_livraiso
              json.dumps({"commande": brut, "livraison": extraction_bl}, ensure_ascii=False),
              json.dumps(br, ensure_ascii=False)))
         did = cur.lastrowid
-        journaliser(conn, u["id"], "DOSSIER_CREE", f"dossier:{did}",
-                    {"canal": canal, "extracteur": extracteur, "lignes": len(br["lignes"]),
-                     "valeurs_rejetees": len(br["rejets"])})
+        details = {"canal": canal, "extracteur": extracteur, "lignes": len(br["lignes"]),
+                   "valeurs_rejetees": len(br["rejets"])}
+        if brut.get("modele"):
+            details["modele"] = brut["modele"]
+        if repli:
+            details["extracteur_demande"] = demande
+            details["repli"] = repli
+        journaliser(conn, u["id"], "DOSSIER_CREE", f"dossier:{did}", details)
     return did
+
+
+def _lire(extracteur: str, texte: str, cls: list[dict], arts: list[dict],
+          octets: bytes | None = None, mime: str | None = None) -> tuple[dict, str, str | None]:
+    """Lit un document avec l'extracteur choisi, puis se replie si l'IA échoue.
+
+    Ordre : extracteur choisi, puis les autres IA en ligne configurées (celles qui savent lire
+    une photo ou un PDF s'il n'y a pas de texte), puis les règles simples s'il y a du texte.
+    Renvoie (extraction normalisée, extracteur réellement utilisé, motif du repli ou None).
+    """
+    a_du_texte = bool((texte or "").strip())
+    candidats = [extracteur]
+    if extracteur != "regles":
+        candidats += [n for n in ia_disponibles() if n != extracteur and (a_du_texte or n in LIT_LES_DOCUMENTS)]
+        if a_du_texte:
+            candidats.append("regles")
+    echecs: list[str] = []
+    for nom in candidats:
+        try:
+            brut = normaliser_resultat(extraire(nom, texte, cls, arts, octets, mime))
+        except ErreurExtraction as e:
+            echecs.append(str(e))
+            continue
+        if nom == extracteur:
+            return brut, nom, None
+        lecteur = "les règles simples (sans IA)" if nom == "regles" else EXTRACTEURS[nom]
+        motif = f"{' '.join(echecs)} Le message a été lu par {lecteur} : vérifiez chaque champ."
+        return brut, nom, motif
+    raise Refus(" ".join(echecs))
 
 
 def _enregistrer_brouillon(conn, u: dict, did: int, version: int, br: dict, action: str, details: dict) -> None:
@@ -260,11 +292,10 @@ def _enregistrer_brouillon(conn, u: dict, did: int, version: int, br: dict, acti
 def ajouter_livraison(conn, u: dict, did: int, version: int, texte: str, extracteur: str) -> None:
     exiger(u, "dossier.ecrire")
     d = _charger_dossier(conn, did)
-    try:
-        brut = normaliser_resultat(extraire(extracteur, texte, clients(conn), articles(conn)))
-    except ErreurExtraction as e:
-        raise Refus(str(e))
+    brut, _, repli = _lire(extracteur, texte, clients(conn), articles(conn))
     br = B.integrer_livraison(d["brouillon"], brut, texte, articles(conn))
+    if repli:
+        br["repli_ia"] = repli
     with transaction(conn):
         n = conn.execute("UPDATE dossiers SET brouillon = ?, texte_livraison = ?, version = version + 1 WHERE id = ?"
                          " AND version = ? AND statut = 'BROUILLON'",

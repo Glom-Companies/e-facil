@@ -14,6 +14,8 @@ import hashlib
 import json
 import os
 import re
+import time
+import urllib.error
 import urllib.request
 from pathlib import Path
 from typing import Literal, Optional
@@ -201,44 +203,192 @@ def extraire_regles(texte: str, clients: list[dict], articles: list[dict]) -> di
     return res
 
 
+# --- Appels aux IA en ligne : nouveaux essais et modèles de secours ----------------------
+
+MOTIF_DELAI = re.compile(r"retry in ([\d.]+)\s*s|retryDelay['\"]?\s*:\s*['\"]([\d.]+)s|try again in ([\d.]+)\s*s",
+                         re.IGNORECASE)
+CODES_TRANSITOIRES = {429, 500, 502, 503, 504}
+
+
+class _Transitoire(Exception):
+    """Échec passager (quota, surcharge, réseau) : un nouvel essai peut réussir."""
+
+    def __init__(self, motif: str, pause: float | None = None):
+        super().__init__(motif)
+        self.motif, self.pause = motif, pause
+
+
+def _nombre_env(nom: str, defaut: float) -> float:
+    try:
+        return float(os.environ.get(nom, defaut))
+    except ValueError:
+        return defaut
+
+
+def _delai_conseille(erreur) -> float | None:
+    """Délai d'attente indiqué par le fournisseur (« Please retry in 25.6s », « try again in 2.5s »)."""
+    m = MOTIF_DELAI.search(str(erreur))
+    return float(next(g for g in m.groups() if g)) if m else None
+
+
+def _motif_http(code: int, fournisseur: str) -> str:
+    if code == 429:
+        return "quota gratuit atteint (trop de demandes par minute ou par jour)"
+    return f"service {fournisseur} surchargé ou indisponible"
+
+
+def _avec_essais(appel, nom: str, attente_max: float) -> dict:
+    """Appelle `appel()` (qui renvoie le texte JSON de la réponse) jusqu'à obtenir un résultat valide.
+
+    Nouvel essai sur _Transitoire (dans la limite de `attente_max` secondes cumulées et de 6 essais)
+    et une seule fois sur JSON invalide. Lève ErreurExtraction avec un message lisible.
+    """
+    attendu, essai = 0.0, 0
+    while True:
+        essai += 1
+        try:
+            texte = appel()
+            if not texte:
+                raise ValueError("réponse vide")
+            return ResultatExtraction.model_validate_json(texte).model_dump()
+        except _Transitoire as e:
+            motif, pause = e.motif, (e.pause if e.pause is not None else min(2 ** essai, 10))
+        except ValueError as e:  # JSON invalide ou non conforme au schéma (ValidationError en hérite)
+            motif, pause = "réponse illisible (JSON invalide)", 0
+            if essai >= 2:
+                raise ErreurExtraction(f"{nom} : {motif}.") from e
+        pause += 0.5
+        if attendu + pause > attente_max or essai >= 6:
+            raise ErreurExtraction(f"{nom} : {motif}.")
+        time.sleep(pause)
+        attendu += pause
+
+
+def _avec_modeles(fournisseur: str, prefixe_env: str, defaut: str, secours_defaut: str,
+                  texte: str, octets: bytes | None, appeler_modele) -> dict:
+    """Essaie le modèle principal puis les modèles de secours ; met en cache la première réponse valide.
+
+    Variables d'environnement (préfixe GEMINI_ ou GROQ_) : MODELE, MODELES_SECOURS (vide = aucun),
+    ATTENTE_MAX (secondes d'attente cumulées par modèle). Le modèle qui a répondu est noté dans « modele ».
+    """
+    principal = os.environ.get(prefixe_env + "MODELE") or defaut
+    secours = os.environ.get(prefixe_env + "MODELES_SECOURS", secours_defaut)
+    modeles = [principal] + [m.strip() for m in secours.split(",") if m.strip() and m.strip() != principal]
+    cache = _lire_cache()
+    for modele in modeles:
+        cle = _cle_cache(fournisseur, modele, texte, octets)
+        if cle in cache:
+            return cache[cle]
+    attente_max = _nombre_env(prefixe_env + "ATTENTE_MAX", 20)
+    echecs = []
+    for modele in modeles:
+        try:
+            resultat = _avec_essais(lambda: appeler_modele(modele), f"{EXTRACTEURS[fournisseur]} ({modele})",
+                                    attente_max)
+        except ErreurExtraction as e:
+            echecs.append(str(e))
+            continue
+        resultat["modele"] = modele
+        _ecrire_cache(_cle_cache(fournisseur, modele, texte, octets), resultat)
+        return resultat
+    raise ErreurExtraction("Lecture par l'IA impossible pour le moment. " + " ; ".join(echecs))
+
+
 # --- Extracteur Gemini ---------------------------------------------------------------
 
 def extraire_gemini(texte: str, octets: bytes | None = None, mime: str | None = None) -> dict:
+    """Extraction par Gemini (texte, photo ou PDF). GEMINI_DELAI : délai maximal d'un appel, en secondes."""
     cle_api = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
     if not cle_api:
         raise ErreurExtraction("Clé GEMINI_API_KEY absente : renseignez-la dans le fichier .env.")
-    modele = os.environ.get("GEMINI_MODELE", "gemini-2.5-flash")
-    cle = _cle_cache("gemini", modele, texte, octets)
-    cache = _lire_cache()
-    if cle in cache:
-        return cache[cle]
 
     from google import genai
-    from google.genai import types
+    from google.genai import errors, types
+    import httpx
 
-    client = genai.Client(api_key=cle_api)
+    delai_ms = int(_nombre_env("GEMINI_DELAI", 60) * 1000)
+    client = genai.Client(api_key=cle_api, http_options=types.HttpOptions(api_version="v1beta", timeout=delai_ms))
     contenu: list = []
     if octets:
         contenu.append(types.Part.from_bytes(data=octets, mime_type=mime or "application/octet-stream"))
         contenu.append("Document joint ci-dessus. Recopie d'abord son texte intégral dans « transcription ».")
     if texte:
         contenu.append("DOCUMENT :\n<<<\n" + texte + "\n>>>")
+
+    def appeler(modele: str) -> str:
+        try:
+            return client.models.generate_content(
+                model=modele,
+                contents=contenu,
+                config=types.GenerateContentConfig(
+                    system_instruction=CONSIGNE,
+                    temperature=0,
+                    response_mime_type="application/json",
+                    response_schema=ResultatExtraction,
+                ),
+            ).text
+        except errors.APIError as e:
+            if e.code not in CODES_TRANSITOIRES:
+                raise ErreurExtraction(f"Gemini a refusé la requête ({e.code}) : {e.message or e.status}") from e
+            raise _Transitoire(_motif_http(e.code, "Gemini"), _delai_conseille(e)) from e
+        except (httpx.TimeoutException, TimeoutError) as e:
+            raise _Transitoire("délai de réponse dépassé", 1) from e
+        except (httpx.TransportError, OSError) as e:
+            raise _Transitoire(f"réseau indisponible ({type(e).__name__})", 2) from e
+
+    return _avec_modeles("gemini", "GEMINI_", "gemini-2.5-flash", "gemini-3.1-flash-lite", texte, octets, appeler)
+
+
+# --- Extracteur Groq (API compatible OpenAI, palier gratuit) ---------------------------
+
+GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
+CONSIGNE_JSON = (CONSIGNE + "\n\nRéponds uniquement par un objet JSON conforme à ce schéma JSON, sans texte autour :\n"
+                 + json.dumps(SCHEMA, ensure_ascii=False))
+
+
+def _post_json(url: str, corps: dict, cle_api: str, delai: float) -> dict:
+    req = urllib.request.Request(url, data=json.dumps(corps).encode("utf-8"), headers={
+        "Content-Type": "application/json", "Authorization": f"Bearer {cle_api}", "User-Agent": "e-facil/1.0"})
+    with urllib.request.urlopen(req, timeout=delai) as r:
+        return json.loads(r.read())
+
+
+def extraire_groq(texte: str) -> dict:
+    """Extraction par Groq (texte seulement). Variables : GROQ_API_KEY, GROQ_MODELE, GROQ_MODELES_SECOURS,
+    GROQ_ATTENTE_MAX, GROQ_DELAI. Le schéma est donné dans la consigne et la réponse validée par Pydantic."""
+    cle_api = os.environ.get("GROQ_API_KEY")
+    if not cle_api:
+        raise ErreurExtraction("Clé GROQ_API_KEY absente : renseignez-la dans le fichier .env.")
+    delai = _nombre_env("GROQ_DELAI", 60)
+    url = os.environ.get("GROQ_URL") or GROQ_URL
+
+    def appeler(modele: str) -> str:
+        corps = {"model": modele, "temperature": 0, "response_format": {"type": "json_object"},
+                 "messages": [{"role": "system", "content": CONSIGNE_JSON},
+                              {"role": "user", "content": "DOCUMENT :\n<<<\n" + texte + "\n>>>"}]}
+        try:
+            reponse = _post_json(url, corps, cle_api, delai)
+        except urllib.error.HTTPError as e:
+            detail = e.read().decode("utf-8", "replace")[:300]
+            if e.code not in CODES_TRANSITOIRES:
+                raise ErreurExtraction(f"Groq a refusé la requête ({e.code}) : {detail}") from e
+            pause = _lire_secondes(e.headers.get("retry-after")) or _delai_conseille(detail)
+            raise _Transitoire(_motif_http(e.code, "Groq"), pause) from e
+        except (TimeoutError, urllib.error.URLError, OSError) as e:
+            raise _Transitoire(f"réseau indisponible ou délai dépassé ({type(e).__name__})", 2) from e
+        try:
+            return reponse["choices"][0]["message"]["content"]
+        except (KeyError, IndexError, TypeError) as e:
+            raise ValueError("réponse sans contenu") from e
+
+    return _avec_modeles("groq", "GROQ_", "openai/gpt-oss-120b", "llama-3.3-70b-versatile", texte, None, appeler)
+
+
+def _lire_secondes(valeur: str | None) -> float | None:
     try:
-        reponse = client.models.generate_content(
-            model=modele,
-            contents=contenu,
-            config=types.GenerateContentConfig(
-                system_instruction=CONSIGNE,
-                temperature=0,
-                response_mime_type="application/json",
-                response_schema=ResultatExtraction,
-            ),
-        )
-        resultat = ResultatExtraction.model_validate_json(reponse.text).model_dump()
-    except Exception as e:  # réseau, quota, réponse invalide
-        raise ErreurExtraction(f"Échec de l'extraction Gemini : {e}") from e
-    _ecrire_cache(cle, resultat)
-    return resultat
+        return float(valeur) if valeur else None
+    except ValueError:
+        return None
 
 
 # --- Extracteur Ollama (local) -------------------------------------------------------
@@ -265,7 +415,15 @@ def extraire_ollama(texte: str) -> dict:
     return resultat
 
 
-EXTRACTEURS = {"regles": "Règles simples (sans IA)", "gemini": "IA Gemini", "ollama": "IA locale (Ollama)"}
+EXTRACTEURS = {"regles": "Règles simples (sans IA)", "gemini": "IA Gemini", "groq": "IA Groq",
+               "ollama": "IA locale (Ollama)"}
+CLES_API = {"gemini": "GEMINI_API_KEY", "groq": "GROQ_API_KEY"}
+LIT_LES_DOCUMENTS = {"gemini"}  # extracteurs capables de lire une photo ou un PDF
+
+
+def ia_disponibles() -> list[str]:
+    """IA en ligne dont la clé est renseignée, dans l'ordre de préférence."""
+    return [nom for nom, cle in CLES_API.items() if os.environ.get(cle)]
 
 
 def extraire(nom: str, texte: str, clients: list[dict], articles: list[dict],
@@ -276,6 +434,10 @@ def extraire(nom: str, texte: str, clients: list[dict], articles: list[dict],
         return extraire_regles(texte, clients, articles)
     if nom == "gemini":
         return extraire_gemini(texte, octets, mime)
+    if nom == "groq":
+        if octets and not texte:
+            raise ErreurExtraction("Groq ne lit que du texte dans ce prototype : utilisez Gemini pour une photo ou un PDF.")
+        return extraire_groq(texte)
     if nom == "ollama":
         if octets and not texte:
             raise ErreurExtraction("Le modèle local ne lit que du texte dans ce prototype.")
@@ -300,7 +462,8 @@ def normaliser_resultat(brut: dict) -> dict:
         "total_cite": vc(brut.get("total_cite")),
         "remise_demandee": brut.get("remise_demandee") or None,
         "instructions_suspectes": [s for s in (brut.get("instructions_suspectes") or []) if s],
+        "modele": brut.get("modele"),
     }
 
 
-__all__ = ["extraire", "normaliser_resultat", "ErreurExtraction", "EXTRACTEURS", "normaliser"]
+__all__ = ["extraire", "normaliser_resultat", "ErreurExtraction", "EXTRACTEURS", "ia_disponibles", "normaliser"]

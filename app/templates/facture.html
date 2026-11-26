@@ -63,7 +63,7 @@
             <div><span class="lib">Date de la facture</span><span class="val">{{ f.valide_le|date_fr }}</span></div>
             <div><span class="lib">Émission DGI (simulée)</span><span class="val">{% if f.horodatage_dgi %}{{ f.horodatage_dgi|date_fr }}{% else %}{{ STATUTS[f.statut] }}{% endif %}</span></div>
             <div><span class="lib">Mode de paiement</span><span class="val">{{ PAIEMENTS.get(c.mode_paiement, c.mode_paiement) }}</span></div>
-            {% for cle, lib in [('reference_commande', 'Réf. commande'), ('date_livraison', 'Livraison souhaitée'), ('conditions_paiement', 'Conditions de paiement')] if (c.commande or {})[cle] %}
+            {% for cle, lib in [('reference_commande', 'Réf. commande'), ('date_livraison', 'Intervention souhaitée' if c.piece_execution == 'ASF' else 'Livraison souhaitée'), ('conditions_paiement', 'Conditions de paiement')] if (c.commande or {})[cle] %}
             <div><span class="lib">{{ lib }}</span><span class="val">{{ c.commande[cle] }}</span></div>
             {% endfor %}
             {% if f.accuse_client_le %}<div><span class="lib">Reçue par le client</span><span class="val">{{ f.accuse_client_le|date_fr }}</span></div>{% endif %}

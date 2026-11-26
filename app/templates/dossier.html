@@ -21,6 +21,7 @@
   {%- endif -%}
 {%- endmacro %}
 {% set perso = entreprise.personnalisation %}
+{% set px = PIECES_EXECUTION[br.piece_execution or 'BL'] %}
 {% block contenu %}
 <div class="entete-page">
   <div>
@@ -80,7 +81,8 @@
             </div>
             <div><span class="lib">Reçu le</span><span class="val">{{ d.cree_le|date_fr }}</span></div>
             <div><span class="lib">Canal</span><span class="val">{{ CANAUX.get(d.canal, d.canal) }}</span></div>
-            {% for cle, lib in [('reference_commande', 'Réf. commande'), ('date_livraison', 'Livraison souhaitée'), ('conditions_paiement', 'Conditions de paiement')] if (br[cle] or {}).valeur %}
+            <div><span class="lib">Nature</span><span class="val">{{ px.nature }}</span></div>
+            {% for cle, lib in [('reference_commande', 'Réf. commande'), ('date_livraison', px.souhait), ('conditions_paiement', 'Conditions de paiement')] if (br[cle] or {}).valeur %}
             <div><span class="lib">{{ lib }}</span><span class="val">{{ br[cle].valeur }}</span><span class="champ-cite">Lu : « {{ br[cle].citation }} »</span></div>
             {% endfor %}
           </div>
@@ -105,7 +107,7 @@
           <table class="doc-lignes lignes-brouillon table-responsive-empile">
             <colgroup><col><col class="l-qte"><col class="l-qte"><col class="l-prix"><col class="l-prix">{% if modifiable %}<col class="l-retirer">{% endif %}</colgroup>
             <thead><tr>
-              <th>Article</th><th class="num">Commandé</th><th class="num">Livré</th><th class="num">Prix {{ aide('TTC') }}</th><th class="num">Montant</th>{% if modifiable %}<th></th>{% endif %}
+              <th>Article</th><th class="num">Commandé</th><th class="num">{{ px.fait }}</th><th class="num">Prix {{ aide('TTC') }}</th><th class="num">Montant</th>{% if modifiable %}<th></th>{% endif %}
             </tr></thead>
             <tbody>
             {% for l in br.lignes %}
@@ -247,8 +249,8 @@
             <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="version" value="{{ d.version }}">
             <input type="hidden" name="cle" value="{{ a.cle_decision }}">
             {% if a.code == 'ECART_COMMANDE_LIVRAISON' %}
-              <button class="btn btn-sm btn-primary" name="choix" value="facturer_livre">Facturer le livré</button>
-              <span class="small text-secondary">ou attendre le reste de la livraison</span>
+              <button class="btn btn-sm btn-primary" name="choix" value="facturer_livre">{{ px.facturer }}</button>
+              <span class="small text-secondary">{{ px.attendre }}</span>
             {% elif a.code == 'PRIX_INHABITUEL' %}
               <button class="btn btn-sm btn-contour-vert" name="choix" value="prix_catalogue">Garder le prix du catalogue</button>
               <input class="form-control form-control-sm" style="max-width:16rem" name="justification" placeholder="Justification du prix cité">
@@ -291,7 +293,7 @@
       </div>
     </div>
     <div class="card">
-      <div class="card-header"><h2 class="card-title">Bon de livraison</h2></div>
+      <div class="card-header"><h2 class="card-title">{{ px.nom }}</h2></div>
       <div class="card-body">
         {% if d.texte_livraison %}
           <pre class="source">{{ source_livraison }}</pre>
@@ -299,11 +301,11 @@
           <form method="post" action="/dossiers/{{ d.id }}/livraison">
             <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="version" value="{{ d.version }}">
             <input type="hidden" name="extracteur" value="{{ d.extracteur }}">
-            <textarea class="form-control mono" name="texte_livraison" rows="3" placeholder="Collez le bon de livraison signé"></textarea>
-            <button class="btn btn-contour-vert btn-sm mt-2" type="submit">Rattacher le bon de livraison</button>
+            <textarea class="form-control mono" name="texte_livraison" rows="3" placeholder="{{ px.coller }}"></textarea>
+            <button class="btn btn-contour-vert btn-sm mt-2" type="submit">{{ px.rattacher }}</button>
           </form>
-          <p class="small text-secondary mt-2 mb-0">Vous pouvez aussi saisir les quantités livrées directement dans le tableau.</p>
-        {% else %}<p class="text-secondary mb-0">Aucun bon de livraison.</p>{% endif %}
+          <p class="small text-secondary mt-2 mb-0">{{ px.saisie }}</p>
+        {% else %}<p class="text-secondary mb-0">{{ px.aucun }}</p>{% endif %}
       </div>
     </div>
     {% if br.rejets %}

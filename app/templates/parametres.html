@@ -25,6 +25,8 @@
       </div>
       <div class="card-header"><h2 class="card-title">Règles</h2></div>
       <div class="card-body">
+        <label class="form-label" for="activite">Activité principale</label>
+        <select class="form-select mb-3" id="activite" name="activite" style="max-width:20rem">{% for k, v in activites.items() %}<option value="{{ k }}" {% if (entreprise.activite or 'biens') == k %}selected{% endif %}>{{ v }}</option>{% endfor %}</select>
         <label class="form-label" for="taux_tva">Taux de TVA (%)</label>
         <input class="form-control mb-3" id="taux_tva" name="taux_tva" value="{{ p.taux_tva or 18 }}" inputmode="decimal" style="max-width:8rem">
         <label class="form-label">Arrondi de la TVA</label>
@@ -64,6 +66,14 @@
         <input class="form-control mono mb-3" id="bot_telegram" name="bot_telegram" value="{{ canaux_cfg.telegram.bot if canaux_cfg.telegram else '' }}" placeholder="@mon_entreprise_bot">
         <button class="btn btn-blanc" type="submit">Enregistrer</button>
       </form>
+      <div class="card-body border-top small">
+        <p class="fw-bold mb-2">Mise en service</p>
+        <ol class="mb-0 ps-3">
+          <li>WhatsApp : connecter le numéro WhatsApp Business de l'entreprise (inscription intégrée de Meta). Telegram : créer le bot avec @BotFather.</li>
+          <li>Habiliter le téléphone de chaque membre de l'équipe, rattaché à son compte.</li>
+          <li>Communiquer le numéro de l'entreprise à l'équipe : chacun écrit au bot avec les droits de son rôle.</li>
+        </ol>
+      </div>
     </div>
     <div class="card mt-3">
       <div class="card-header"><h2 class="card-title">Démonstration</h2></div>

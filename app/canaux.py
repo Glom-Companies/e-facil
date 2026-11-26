@@ -42,7 +42,7 @@ _debits: dict[str, list[float]] = {}
 
 AIDE = ("e-FACIL · commandes par message\n"
         "• Envoyez la commande du client : texte, note vocale, photo ou PDF.\n"
-        "• BL 12 : 10 cartons de savon… → rattache la livraison au dossier 12.\n"
+        "• BL 12 : 10 cartons livrés… ou ASF 12 : prestation réalisée… → rattache la pièce au dossier 12.\n"
         "• VALIDER 12 → valide et émet la facture (responsable).\n"
         "• ENVOYER 12 → envoie la facture au client.\n"
         "• ANNULER 12 → supprime le brouillon 12.")
@@ -239,13 +239,13 @@ def _executer(conn, plateforme, numero, u, type_msg, texte, contenu) -> None:
             {"valider": _valider, "ok": _valider, "annuler": _annuler, "envoyer": _envoyer}[m.group(1).lower()](
                 conn, plateforme, numero, u, int(m.group(2)))
             return
-        m = re.fullmatch(r"(?is)(?:bl|livraison)\s*n?°?\s*(\d+)\s*[:\-]?\s*(.+)", commande)
+        m = re.fullmatch(r"(?is)(?:bl|livraison|asf|attestation)\s*n?°?\s*(\d+)\s*[:\-]?\s*(.+)", commande)
         if m:
             did = int(m.group(1))
             S.verifier_acces_dossier(conn, u, did)
             d = S.dossier(conn, did)
             S.ajouter_livraison(conn, u, did, d["version"], m.group(2).strip(), S.extracteur_auto(False))
-            _annoncer(conn, plateforme, numero, did, "Livraison rattachée au dossier")
+            _annoncer(conn, plateforme, numero, did, "Pièce d'exécution rattachée au dossier")
             return
     octets = mime = None
     if type_msg in ("audio", "image", "document"):

@@ -10,7 +10,7 @@ Configurations :
     S2  IA Gemini + vérification des citations et des référentiels (configuration de la démo) ;
     S3  IA locale Ollama + vérifications.
 
-Le format du corpus est celui de la consigne « jeu de données et corpus de test ».
+Le format du corpus est décrit dans data/corpus/README.md.
 Les appels à l'IA sont mis en cache (instance/cache_extraction.json) : relancer ne coûte rien.
 """
 from __future__ import annotations

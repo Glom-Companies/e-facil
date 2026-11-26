@@ -89,7 +89,7 @@ Les 36 tests couvrent :
 | S2 | IA Gemini avec vérification des citations et des référentiels (démo) |
 | S3 | IA locale (Ollama) avec vérifications |
 
-Le script compte les champs justes, les valeurs inventées, les champs laissés vides à tort et les anomalies détectées, avec des intervalles de confiance de Wilson. Les résultats sont écrits dans `eval/resultats_<corpus>.md`, et les réponses de l'IA sont mises en cache. Le format du corpus est décrit dans `data/corpus/exemple.jsonl`.
+Le script compte les champs justes, les valeurs inventées, les champs laissés vides à tort et les anomalies détectées, avec des intervalles de confiance de Wilson. Les résultats sont écrits dans `eval/resultats_<corpus>.md`, et les réponses de l'IA sont mises en cache. Le format du corpus est décrit dans [`data/corpus/README.md`](data/corpus/README.md).
 
 ## Architecture
 
